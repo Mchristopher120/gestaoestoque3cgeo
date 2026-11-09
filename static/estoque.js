@@ -3,12 +3,12 @@ const E = { itens: [], sort: { key: null, dir: 1 }, editando: null, fichaId: nul
 const ORD_SIT = { zerado: 0, baixo: 1, excesso: 2, ok: 3 };
 
 async function carregar() {
-    if (!E.itens.length) $('tbodyItens').innerHTML = linhaCarregando(9);
+    if (!E.itens.length) $('tbodyItens').innerHTML = linhaCarregando(7);
     try {
         E.itens = (await fetchJSON('/api/itens')).map(i => ({ ...i, ord_sit: ORD_SIT[i.situacao] }));
     } catch (err) {
         showToast(err.message, 'error');
-        $('tbodyItens').innerHTML = `<tr><td colspan="9" class="empty">${escapeHTML(err.message)}</td></tr>`;
+        $('tbodyItens').innerHTML = `<tr><td colspan="7" class="empty">${escapeHTML(err.message)}</td></tr>`;
         return;
     }
     movConfigurar(E.itens, () => recarregarTudo());
@@ -39,7 +39,7 @@ function render() {
     const lista = ordenar(filtrar(), E.sort.key, E.sort.dir);
     $('countBadge').textContent = `${fmtNum(lista.length)} ${lista.length === 1 ? 'item' : 'itens'}`;
     if (!lista.length) {
-        $('tbodyItens').innerHTML = `<tr><td colspan="9" class="empty"><span class="empty-icon">${ico('package', 'ico ico-empty')}</span>
+        $('tbodyItens').innerHTML = `<tr><td colspan="7" class="empty"><span class="empty-icon">${ico('package', 'ico ico-empty')}</span>
             <h2>${E.itens.length ? 'Nenhum item encontrado' : 'Nenhum item cadastrado'}</h2>
             ${E.itens.length ? 'Ajuste a busca ou os filtros.' : 'Clique em “Novo item” ou importe uma planilha.'}</td></tr>`;
         return;
@@ -52,8 +52,6 @@ function render() {
             <td>${escapeHTML(i.categoria) || '<span class="muted">—</span>'}</td>
             <td class="num nowrap"><strong>${fmtNum(i.saldo)}</strong> <span class="muted small">${escapeHTML(i.unidade)}</span></td>
             <td class="num">${i.estoque_minimo ? fmtNum(i.estoque_minimo) : '<span class="muted">—</span>'}</td>
-            <td class="num money">${i.custo_medio ? fmtMoney(i.custo_medio) : '<span class="muted">—</span>'}</td>
-            <td class="num money">${i.valor_total ? fmtMoney(i.valor_total) : '<span class="muted">—</span>'}</td>
             <td>${i.ativo ? badgeSituacao(i.situacao) : '<span class="badge neutro">Arquivado</span>'}</td>
             <td class="acoes">
                 ${i.ativo ? `<button class="btn btn-sm btn-secondary" data-mov="ENTRADA" data-id="${i.id}" title="Registrar entrada" aria-label="Entrada">${ico('arrow-down')}</button>
@@ -85,7 +83,7 @@ async function salvarItem(ev) {
         codigo: $('iCodigo').value, descricao: $('iDescricao').value, unidade: $('iUnidade').value, categoria: $('iCategoria').value,
         localizacao: $('iLocal').value, estoque_minimo: $('iMin').value, estoque_maximo: $('iMax').value, observacoes: $('iObs').value,
     };
-    if (!E.editando) { corpo.saldo_inicial = $('iSaldo').value; corpo.valor_unitario = $('iValor').value; }
+    if (!E.editando) { corpo.saldo_inicial = $('iSaldo').value; }
     const btn = $('itemSalvar');
     btn.disabled = true;
     try {
@@ -116,8 +114,6 @@ async function abrirFicha(id, abrir = true) {
                 <div class="chips">
                     ${chip('Código', escapeHTML(i.codigo))}
                     ${chip('Saldo', `${fmtNum(i.saldo)} ${escapeHTML(i.unidade)}`, i.situacao === 'zerado' ? 'chip-red' : i.situacao === 'baixo' ? 'chip-amber' : 'chip-green')}
-                    ${chip('Custo médio', fmtMoney(i.custo_medio))}
-                    ${chip('Valor', fmtMoney(i.valor_total), 'chip-teal')}
                     ${i.estoque_minimo ? chip('Mínimo', fmtNum(i.estoque_minimo)) : ''}
                     ${i.estoque_maximo ? chip('Máximo', fmtNum(i.estoque_maximo)) : ''}
                     ${i.categoria ? chip('Categoria', escapeHTML(i.categoria)) : ''}

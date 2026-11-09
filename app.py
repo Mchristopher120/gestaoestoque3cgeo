@@ -145,7 +145,6 @@ SCHEMA = [
         localizacao TEXT,
         estoque_minimo {REAL} DEFAULT 0,
         estoque_maximo {REAL} DEFAULT 0,
-        custo_medio {REAL} DEFAULT 0,
         ativo INTEGER DEFAULT 1,
         observacoes TEXT,
         criado_em TEXT)""",
@@ -159,8 +158,6 @@ SCHEMA = [
         data TEXT NOT NULL,
         documento TEXT,
         contraparte TEXT,
-        valor_unitario {REAL} DEFAULT 0,
-        custo_unit {REAL} DEFAULT 0,
         observacoes TEXT,
         usuario TEXT,
         criado_em TEXT)""",
@@ -398,31 +395,18 @@ class SaldoNegativo(ValueError):
 
 
 def recalcular_item(db, item_id):
-    """Refaz, em ordem cronológica, o custo médio ponderado e o custo de cada
-    movimento. Recusa (SaldoNegativo) qualquer histórico em que o saldo fique
-    negativo — assim saídas/estornos nunca deixam o estoque inconsistente."""
-    movs = db.execute(
-        "SELECT id, tipo, qtde, valor_unitario, custo_unit, data FROM movimentos"
-        " WHERE item_id = ? ORDER BY data, id", (item_id,)).fetchall()
-    saldo, pm = 0.0, 0.0
+    """Confere, em ordem cronológica, que o saldo nunca fica negativo. Recusa
+    (SaldoNegativo) qualquer histórico inconsistente — assim saídas e estornos
+    nunca deixam o estoque errado."""
+    movs = db.execute("SELECT qtde, data FROM movimentos WHERE item_id = ? ORDER BY data, id", (item_id,)).fetchall()
+    saldo = 0.0
     for m in movs:
-        q = float(m["qtde"])
-        if m["tipo"] == "ENTRADA":
-            vu = float(m["valor_unitario"] or 0)
-            novo = saldo + q
-            pm = ((saldo * pm + q * vu) / novo) if novo > EPS else vu
-            custo = vu
-        else:
-            custo = pm
-        saldo += q
+        saldo += float(m["qtde"])
         if saldo < -EPS:
             raise SaldoNegativo(
                 f"Saldo ficaria negativo em {fmt_data(m['data'])} ({fmt_qtd(saldo)}). "
                 "Confira as datas e quantidades.")
-        if abs(float(m["custo_unit"] or 0) - custo) > 1e-9:
-            db.execute("UPDATE movimentos SET custo_unit = ? WHERE id = ?", (custo, m["id"]))
-    db.execute("UPDATE itens SET custo_medio = ? WHERE id = ?", (pm, item_id))
-    return saldo, pm
+    return saldo
 
 
 def fmt_data(s):
@@ -444,8 +428,6 @@ def completar_item(r):
     minimo, maximo = float(d["estoque_minimo"] or 0), float(d["estoque_maximo"] or 0)
     d["saldo"] = round(saldo, 6)
     d["estoque_minimo"], d["estoque_maximo"] = minimo, maximo
-    d["custo_medio"] = float(d["custo_medio"] or 0)
-    d["valor_total"] = round(saldo * d["custo_medio"], 2)
     d["situacao"] = situacao(saldo, minimo, maximo)
     d["ativo"] = bool(d["ativo"])
     # sugestão de reposição: o que falta para chegar ao máximo (ou ao dobro do mínimo)
@@ -493,11 +475,11 @@ def codigo_existe(db, codigo, ignorar_id=None):
     return None
 
 
-def inserir_movimento(db, item_id, tipo, qtde_assinada, data, documento, contraparte, vu, obs):
+def inserir_movimento(db, item_id, tipo, qtde_assinada, data, documento, contraparte, obs):
     cur = db.execute(
-        "INSERT INTO movimentos (item_id, tipo, qtde, data, documento, contraparte, valor_unitario,"
-        " observacoes, usuario, criado_em) VALUES (?,?,?,?,?,?,?,?,?,?)",
-        (item_id, tipo, qtde_assinada, data, documento, contraparte, vu, obs, usuario_atual(), agora()))
+        "INSERT INTO movimentos (item_id, tipo, qtde, data, documento, contraparte,"
+        " observacoes, usuario, criado_em) VALUES (?,?,?,?,?,?,?,?,?)",
+        (item_id, tipo, qtde_assinada, data, documento, contraparte, obs, usuario_atual(), agora()))
     return cur.lastrowid
 
 
@@ -549,21 +531,20 @@ def api_criar_item():
         return erro(f"Já existe um item com o código {d['codigo']}.", 409)
     try:
         saldo_ini = parse_num(data.get("saldo_inicial"))
-        custo_ini = parse_num(data.get("valor_unitario"))
         dt = parse_data(data.get("data"))
     except ValueError as e:
         return erro(str(e))
-    if saldo_ini < 0 or custo_ini < 0:
-        return erro("Saldo inicial e valor unitário não podem ser negativos.")
+    if saldo_ini < 0:
+        return erro("O saldo inicial não pode ser negativo.")
     try:
         cur = db.execute(
             "INSERT INTO itens (codigo, descricao, categoria, unidade, localizacao, estoque_minimo,"
-            " estoque_maximo, custo_medio, ativo, observacoes, criado_em) VALUES (?,?,?,?,?,?,?,?,1,?,?)",
+            " estoque_maximo, ativo, observacoes, criado_em) VALUES (?,?,?,?,?,?,?,1,?,?)",
             (d["codigo"], d["descricao"], d["categoria"], d["unidade"], d["localizacao"],
-             d["estoque_minimo"], d["estoque_maximo"], 0, d["observacoes"], agora()))
+             d["estoque_minimo"], d["estoque_maximo"], d["observacoes"], agora()))
         iid = cur.lastrowid
         if saldo_ini > EPS:
-            inserir_movimento(db, iid, "ENTRADA", saldo_ini, dt, "Saldo inicial", "", custo_ini, "")
+            inserir_movimento(db, iid, "ENTRADA", saldo_ini, dt, "Saldo inicial", "", "")
             recalcular_item(db, iid)
         registrar(db, "CRIAR", "item", iid, iid,
                   f"Cadastrou o item {d['codigo']} — {d['descricao']}"
@@ -667,8 +648,6 @@ def api_movimentos():
         limite = 500
     sql += f" ORDER BY m.data DESC, m.id DESC LIMIT {limite}"
     rows = [dict(r) for r in db.execute(sql, tuple(p)).fetchall()]
-    for r in rows:
-        r["valor_total"] = round(abs(float(r["qtde"])) * float(r["valor_unitario"] if r["tipo"] == "ENTRADA" else r["custo_unit"] or 0), 2)
     return jsonify(rows)
 
 
@@ -693,7 +672,6 @@ def api_criar_movimento():
         if dt > hoje():
             return erro("A data da movimentação não pode estar no futuro.")
         doc, contra, obs = txt(data.get("documento"), 60), txt(data.get("contraparte"), 100), txt(data.get("observacoes"), 300)
-        vu = 0.0
         if tipo == "AJUSTE":
             contado = parse_num(data.get("saldo_contado"))
             if contado < 0:
@@ -708,9 +686,6 @@ def api_criar_movimento():
             if q <= 0:
                 return erro("A quantidade deve ser maior que zero.")
             if tipo == "ENTRADA":
-                vu = parse_num(data.get("valor_unitario"))
-                if vu < 0:
-                    return erro("O valor unitário não pode ser negativo.")
                 qtde = q
             else:
                 if q > it["saldo"] + EPS:
@@ -719,7 +694,7 @@ def api_criar_movimento():
     except ValueError as e:
         return erro(str(e))
     try:
-        mid = inserir_movimento(db, iid, tipo, qtde, dt, doc, contra, vu, obs)
+        mid = inserir_movimento(db, iid, tipo, qtde, dt, doc, contra, obs)
         recalcular_item(db, iid)
         rot = {"ENTRADA": "Entrada", "SAIDA": "Saída", "AJUSTE": "Ajuste"}[tipo]
         sinal = "+" if qtde > 0 else "−"
@@ -774,62 +749,54 @@ def api_stats():
     ini_mes = hj.replace(day=1).strftime("%Y-%m-%d")
     ini_12 = (hj.replace(day=1) - timedelta(days=335)).replace(day=1).strftime("%Y-%m-%d")
     ini_30 = (hj - timedelta(days=30)).strftime("%Y-%m-%d")
-    movs = db.execute("SELECT item_id, tipo, qtde, data, valor_unitario, custo_unit FROM movimentos"
-                      " WHERE data >= ?", (min(ini_12, ini_30),)).fetchall()
+    movs = db.execute("SELECT item_id, tipo, qtde, data FROM movimentos WHERE data >= ?",
+                      (min(ini_12, ini_30),)).fetchall()
     meses = {}
     y, mth = hj.year, hj.month
     for _ in range(12):
-        meses[f"{y:04d}-{mth:02d}"] = {"mes": f"{y:04d}-{mth:02d}", "entradas": 0.0, "saidas": 0.0}
+        meses[f"{y:04d}-{mth:02d}"] = {"mes": f"{y:04d}-{mth:02d}", "entradas": 0, "saidas": 0}
         mth -= 1
         if mth == 0:
             y, mth = y - 1, 12
-    saidas30, n_mes, ent_mes, sai_mes = {}, 0, 0.0, 0.0
+    saidas30, n_mes, ent_mes, sai_mes = {}, 0, 0, 0
     for m in movs:
         q = float(m["qtde"])
-        if m["tipo"] == "ENTRADA":
-            valor = q * float(m["valor_unitario"] or 0)
-        else:
-            valor = abs(q) * float(m["custo_unit"] or 0)
         chave = m["data"][:7]
         if chave in meses:
             if m["tipo"] == "ENTRADA":
-                meses[chave]["entradas"] += valor
+                meses[chave]["entradas"] += 1
             elif m["tipo"] == "SAIDA":
-                meses[chave]["saidas"] += valor
+                meses[chave]["saidas"] += 1
         if m["data"] >= ini_mes:
             n_mes += 1
             if m["tipo"] == "ENTRADA":
-                ent_mes += valor
+                ent_mes += 1
             elif m["tipo"] == "SAIDA":
-                sai_mes += valor
+                sai_mes += 1
         if m["tipo"] == "SAIDA" and m["data"] >= ini_30:
-            s = saidas30.setdefault(m["item_id"], {"qtde": 0.0, "valor": 0.0})
-            s["qtde"] += abs(q)
-            s["valor"] += valor
+            saidas30[m["item_id"]] = saidas30.get(m["item_id"], 0.0) + abs(q)
     por_id = {i["id"]: i for i in itens}
-    top_saidas = sorted(saidas30.items(), key=lambda kv: -kv[1]["valor"])[:5]
+    top_saidas = sorted(saidas30.items(), key=lambda kv: -kv[1])[:5]
     cat = {}
     for i in ativos:
         c = i["categoria"] or "Sem categoria"
-        cat[c] = cat.get(c, 0.0) + i["valor_total"]
+        cat[c] = cat.get(c, 0) + 1
     criticos = sorted([i for i in ativos if i["situacao"] in ("zerado", "baixo")],
                       key=lambda i: (0 if i["situacao"] == "zerado" else 1,
                                      (i["saldo"] / i["estoque_minimo"]) if i["estoque_minimo"] else 0))
     return jsonify({
         "itens_ativos": len(ativos), "itens_arquivados": len(itens) - len(ativos),
-        "valor_total": round(sum(i["valor_total"] for i in ativos), 2),
         "situacao": cont,
-        "movimentos_mes": n_mes, "entradas_mes": round(ent_mes, 2), "saidas_mes": round(sai_mes, 2),
+        "movimentos_mes": n_mes, "entradas_mes": ent_mes, "saidas_mes": sai_mes,
         "criticos_total": len(criticos),
         "criticos": [{k: c[k] for k in ("id", "codigo", "descricao", "unidade", "saldo", "estoque_minimo",
                                           "situacao", "repor", "localizacao")} for c in criticos[:8]],
-        "top_valor": [{"id": i["id"], "codigo": i["codigo"], "descricao": i["descricao"], "unidade": i["unidade"],
-                       "saldo": i["saldo"], "valor_total": i["valor_total"]}
-                      for i in sorted(ativos, key=lambda i: -i["valor_total"])[:5] if i["valor_total"] > 0],
+        "top_saldo": [{"id": i["id"], "codigo": i["codigo"], "descricao": i["descricao"], "unidade": i["unidade"],
+                       "saldo": i["saldo"]} for i in sorted(ativos, key=lambda i: -i["saldo"])[:5] if i["saldo"] > 0],
         "top_saidas": [{"id": iid, "codigo": por_id[iid]["codigo"], "descricao": por_id[iid]["descricao"],
-                        "unidade": por_id[iid]["unidade"], "qtde": round(s["qtde"], 3), "valor": round(s["valor"], 2)}
-                       for iid, s in top_saidas if iid in por_id],
-        "categorias": [{"categoria": k, "valor": round(v, 2)} for k, v in sorted(cat.items(), key=lambda kv: -kv[1])[:6] if v > 0],
+                        "unidade": por_id[iid]["unidade"], "qtde": round(q, 3)}
+                       for iid, q in top_saidas if iid in por_id],
+        "categorias": [{"categoria": k, "itens": v} for k, v in sorted(cat.items(), key=lambda kv: -kv[1])[:6]],
         "evolucao": [meses[k] for k in sorted(meses)],
     })
 
@@ -882,28 +849,21 @@ def api_exportar():
     ws = wb.active
     ws.title = "Estoque"
     ws.append(["Código", "Descrição", "Categoria", "Unidade", "Localização", "Saldo", "Estoque mínimo",
-               "Estoque máximo", "Custo médio (R$)", "Valor em estoque (R$)", "Situação", "Ativo"])
+               "Estoque máximo", "Situação", "Ativo"])
     for r in db.execute(SQL_ITENS + " ORDER BY i.descricao").fetchall():
         i = completar_item(r)
         ws.append([i["codigo"], i["descricao"], i["categoria"], i["unidade"], i["localizacao"], i["saldo"],
-                   i["estoque_minimo"], i["estoque_maximo"], i["custo_medio"], i["valor_total"],
-                   ROT_SIT[i["situacao"]], "Sim" if i["ativo"] else "Não"])
-    for row in ws.iter_rows(min_row=2):
-        for c in (row[8], row[9]):
-            c.number_format = 'R$ #,##0.00'
-    _estilo_planilha(ws, [14, 44, 18, 9, 16, 11, 14, 14, 16, 18, 18, 8])
+                   i["estoque_minimo"], i["estoque_maximo"], ROT_SIT[i["situacao"]], "Sim" if i["ativo"] else "Não"])
+    _estilo_planilha(ws, [14, 44, 18, 9, 16, 11, 14, 14, 18, 8])
     ws2 = wb.create_sheet("Movimentações")
-    ws2.append(["Data", "Tipo", "Código", "Item", "Quantidade", "Unidade", "Valor unitário (R$)", "Documento",
+    ws2.append(["Data", "Tipo", "Código", "Item", "Quantidade", "Unidade", "Documento",
                 "Origem/Destino", "Observações", "Usuário"])
     for m in db.execute("SELECT m.*, i.codigo, i.descricao, i.unidade FROM movimentos m JOIN itens i ON i.id = m.item_id"
                         " ORDER BY m.data DESC, m.id DESC").fetchall():
-        vu = m["valor_unitario"] if m["tipo"] == "ENTRADA" else m["custo_unit"]
         ws2.append([fmt_data(m["data"]), {"ENTRADA": "Entrada", "SAIDA": "Saída", "AJUSTE": "Ajuste"}[m["tipo"]],
-                    m["codigo"], m["descricao"], m["qtde"], m["unidade"], vu, m["documento"], m["contraparte"],
+                    m["codigo"], m["descricao"], m["qtde"], m["unidade"], m["documento"], m["contraparte"],
                     m["observacoes"], m["usuario"]])
-    for row in ws2.iter_rows(min_row=2):
-        row[6].number_format = 'R$ #,##0.00'
-    _estilo_planilha(ws2, [12, 10, 14, 44, 12, 9, 16, 16, 22, 30, 16])
+    _estilo_planilha(ws2, [12, 10, 14, 44, 12, 9, 16, 22, 30, 16])
     registrar(db, "EXPORTAR", "planilha", None, None, "Exportou o estoque para Excel")
     db.commit()
     buf = io.BytesIO()
@@ -914,13 +874,12 @@ def api_exportar():
 
 
 COLUNAS_MODELO = ["Código", "Descrição", "Categoria", "Unidade", "Localização", "Estoque mínimo",
-                  "Estoque máximo", "Valor unitário", "Saldo inicial"]
+                  "Estoque máximo", "Saldo inicial"]
 ALIAS = {
     "codigo": "codigo", "cod": "codigo", "descricao": "descricao", "item": "descricao", "nome": "descricao",
     "categoria": "categoria", "grupo": "categoria", "unidade": "unidade", "und": "unidade", "un": "unidade",
     "localizacao": "localizacao", "local": "localizacao", "estoque minimo": "estoque_minimo", "minimo": "estoque_minimo",
-    "estoque maximo": "estoque_maximo", "maximo": "estoque_maximo", "valor unitario": "valor_unitario",
-    "valor": "valor_unitario", "custo": "valor_unitario", "preco": "valor_unitario",
+    "estoque maximo": "estoque_maximo", "maximo": "estoque_maximo",
     "saldo inicial": "saldo_inicial", "saldo": "saldo_inicial", "quantidade": "saldo_inicial", "qtde": "saldo_inicial",
 }
 
@@ -932,9 +891,9 @@ def api_modelo_importacao():
     ws = wb.active
     ws.title = "Itens"
     ws.append(COLUNAS_MODELO)
-    ws.append(["PAP-A4", "Papel A4 75g (resma 500 fls)", "Material de expediente", "RESMA", "Prateleira A1", 20, 100, "27,90", 45])
-    ws.append(["CAN-AZ", "Caneta esferográfica azul", "Material de expediente", "UN", "Prateleira A2", 50, 300, "1,35", 120])
-    _estilo_planilha(ws, [14, 44, 24, 10, 16, 15, 15, 15, 14])
+    ws.append(["PAP-A4", "Papel A4 75g (resma 500 fls)", "Material de expediente", "RESMA", "Prateleira A1", 20, 100, 45])
+    ws.append(["CAN-AZ", "Caneta esferográfica azul", "Material de expediente", "UN", "Prateleira A2", 50, 300, 120])
+    _estilo_planilha(ws, [14, 44, 24, 10, 16, 15, 15, 14])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -1011,19 +970,19 @@ def api_importar():
                                 d["estoque_minimo"], d["estoque_maximo"], existentes[chave]))
                     atualizados += 1
                 else:
-                    saldo, vu = parse_num(col("saldo_inicial")), parse_num(col("valor_unitario"))
-                    if saldo < 0 or vu < 0:
-                        erros.append(f"Linha {n}: saldo e valor não podem ser negativos.")
+                    saldo = parse_num(col("saldo_inicial"))
+                    if saldo < 0:
+                        erros.append(f"Linha {n}: o saldo não pode ser negativo.")
                         continue
                     cur = db.execute(
                         "INSERT INTO itens (codigo, descricao, categoria, unidade, localizacao, estoque_minimo,"
-                        " estoque_maximo, custo_medio, ativo, observacoes, criado_em) VALUES (?,?,?,?,?,?,?,?,1,?,?)",
+                        " estoque_maximo, ativo, observacoes, criado_em) VALUES (?,?,?,?,?,?,?,1,?,?)",
                         (d["codigo"], d["descricao"], d["categoria"], d["unidade"], d["localizacao"],
-                         d["estoque_minimo"], d["estoque_maximo"], 0, "", agora()))
+                         d["estoque_minimo"], d["estoque_maximo"], "", agora()))
                     iid = cur.lastrowid
                     existentes[chave] = iid
                     if saldo > EPS:
-                        inserir_movimento(db, iid, "ENTRADA", saldo, hoje(), "Importação", "", vu, "Saldo inicial importado")
+                        inserir_movimento(db, iid, "ENTRADA", saldo, hoje(), "Importação", "", "Saldo inicial importado")
                         recalcular_item(db, iid)
                     criados += 1
             except ValueError as e:

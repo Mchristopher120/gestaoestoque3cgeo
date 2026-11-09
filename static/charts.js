@@ -66,19 +66,19 @@ function graficoEvolucao(el, meses) {
     const max = Math.max(0, ...meses.map(m => Math.max(m.entradas, m.saidas)));
     if (!max) { el.innerHTML = graficoVazio('Sem entradas ou saídas nos últimos 12 meses.'); return; }
     const mag = Math.pow(10, Math.floor(Math.log10(max)));
-    const topo = [1, 2, 2.5, 5, 10].map(f => f * mag).find(v => v >= max);
+    const topo = Math.max(4, [1, 2, 2.5, 4, 5, 10].map(f => f * mag).find(v => v >= max));
     const NOMES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
     el.innerHTML = `
     <div class="evo">
         <div class="evo-grid">
-            ${[0, 0.25, 0.5, 0.75, 1].map(f => `<div class="evo-line" style="bottom:${f * 100}%"><span>${fmtMoneyCurto(topo * f)}</span></div>`).join('')}
+            ${[0, 0.25, 0.5, 0.75, 1].map(f => `<div class="evo-line" style="bottom:${f * 100}%"><span>${fmtNum(Math.round(topo * f))}</span></div>`).join('')}
         </div>
         <div class="evo-cols">
             ${meses.map(m => {
                 const [a, mm] = m.mes.split('-');
                 const rot = `${NOMES[+mm - 1]}/${a.slice(2)}`;
                 return `
-                <div class="evo-col" tabindex="0" title="${rot} — Entradas ${fmtMoney(m.entradas)} • Saídas ${fmtMoney(m.saidas)}">
+                <div class="evo-col" tabindex="0" title="${rot} — Entradas ${fmtNum(m.entradas)} • Saídas ${fmtNum(m.saidas)}">
                     <div class="evo-bars">
                         <span class="evo-bar liq" style="height:${(m.entradas / topo) * 100}%"></span>
                         <span class="evo-bar saida" style="height:${(m.saidas / topo) * 100}%"></span>

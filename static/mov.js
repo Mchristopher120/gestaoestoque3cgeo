@@ -28,7 +28,6 @@ function movAtualizar() {
     const t = movTipoAtual(), it = movItemAtual();
     $('movTitulo').textContent = { ENTRADA: 'Registrar entrada', SAIDA: 'Registrar saída', AJUSTE: 'Ajuste de inventário' }[t];
     $('gQtde').hidden = t === 'AJUSTE';
-    $('gValor').hidden = t !== 'ENTRADA';
     $('gContado').hidden = t !== 'AJUSTE';
     $('lblContra').parentElement.hidden = t === 'AJUSTE';
     $('lblDoc').textContent = t === 'ENTRADA' ? 'Nota fiscal / documento' : t === 'SAIDA' ? 'Requisição / documento' : 'Documento (opcional)';
@@ -37,10 +36,8 @@ function movAtualizar() {
     $('movSalvar').textContent = t === 'AJUSTE' ? 'Ajustar saldo' : 'Registrar';
     $('movSaldoInfo').innerHTML = it
         ? `Saldo atual: <strong>${fmtNum(it.saldo)} ${escapeHTML(it.unidade)}</strong>` +
-          (it.custo_medio ? ` · custo médio ${fmtMoney(it.custo_medio)}` : '') +
           (it.localizacao ? ` · ${escapeHTML(it.localizacao)}` : '')
         : '';
-    if (t === 'ENTRADA' && it && !$('movValor').value && it.custo_medio) $('movValor').placeholder = String(it.custo_medio).replace('.', ',');
     movResumo();
 }
 
@@ -49,8 +46,8 @@ function movResumo() {
     if (!it) { box.hidden = true; return; }
     let html = '';
     if (t === 'ENTRADA') {
-        const q = parseNumBR($('movQtde').value), v = parseNumBR($('movValor').value);
-        if (q > 0) html = `Novo saldo: <strong>${fmtNum(it.saldo + q)} ${escapeHTML(it.unidade)}</strong>${v ? ` · total da entrada <strong>${fmtMoney(q * v)}</strong>` : ''}`;
+        const q = parseNumBR($('movQtde').value);
+        if (q > 0) html = `Novo saldo: <strong>${fmtNum(it.saldo + q)} ${escapeHTML(it.unidade)}</strong>`;
     } else if (t === 'SAIDA') {
         const q = parseNumBR($('movQtde').value);
         if (q > 0) html = q > it.saldo
@@ -74,7 +71,6 @@ async function movSalvar(ev) {
     };
     if (t === 'AJUSTE') corpo.saldo_contado = $('movContado').value;
     else corpo.qtde = $('movQtde').value;
-    if (t === 'ENTRADA') corpo.valor_unitario = $('movValor').value;
     const btn = $('movSalvar');
     btn.disabled = true;
     try {
@@ -93,4 +89,4 @@ $('formMov').addEventListener('submit', movSalvar);
 $('movCancelar').addEventListener('click', () => fecharModal('modalMov'));
 document.querySelectorAll('#movTipo input').forEach(r => r.addEventListener('change', movAtualizar));
 $('movItem').addEventListener('change', movAtualizar);
-['movQtde', 'movValor', 'movContado'].forEach(id => $(id).addEventListener('input', movResumo));
+['movQtde', 'movContado'].forEach(id => $(id).addEventListener('input', movResumo));

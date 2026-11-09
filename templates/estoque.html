@@ -37,8 +37,6 @@
                             <th data-key="categoria">Categoria</th>
                             <th data-key="saldo" data-default="desc">Saldo</th>
                             <th data-key="estoque_minimo">Mín.</th>
-                            <th data-key="custo_medio">Custo médio</th>
-                            <th data-key="valor_total" data-default="desc">Valor</th>
                             <th data-key="situacao">Situação</th>
                             <th>Ações</th>
                         </tr>
@@ -68,10 +66,8 @@
                         <div><label for="iMax">Estoque máximo</label><input id="iMax" class="input" inputmode="decimal" placeholder="0"></div>
                     </div>
                     <div id="grupoInicial">
-                        <div class="grid-2">
-                            <div><label for="iSaldo">Saldo inicial</label><input id="iSaldo" class="input" inputmode="decimal" placeholder="0"></div>
-                            <div><label for="iValor">Valor unitário (R$)</label><input id="iValor" class="input" inputmode="decimal" placeholder="0,00"></div>
-                        </div>
+                        <label for="iSaldo">Saldo inicial</label>
+                        <input id="iSaldo" class="input" inputmode="decimal" placeholder="0">
                         <p class="campo-ajuda">O saldo inicial vira uma entrada. Depois, o saldo só muda por movimentações.</p>
                     </div>
                     <label for="iObs">Observações</label>

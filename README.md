@@ -4,7 +4,7 @@ Sistema de estoque com a mesma identidade visual do sistema de empenhos (Flask +
 
 **Telas:** Painel · Estoque (cadastro, ficha/kardex) · Movimentações (entrada, saída, ajuste, estorno) · Histórico · Importar/Exportar Excel.
 
-**Regras:** saldo = soma das movimentações; saída nunca deixa o saldo negativo; custo médio ponderado recalculado a cada lançamento; item com movimentação só pode ser arquivado (nunca excluído); tudo fica no histórico.
+**Regras:** saldo = soma das movimentações; saída nunca deixa o saldo negativo; item com movimentação só pode ser arquivado (nunca excluído); tudo fica no histórico.
 
 ## Rodar local
     pip install -r requirements.txt

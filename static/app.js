@@ -23,7 +23,7 @@ async function carregarPainel({ aviso = false } = {}) {
         if (!carregouPainel) {
             $('kpis').innerHTML = '';
             $('tbodyUltimas').innerHTML = `<tr><td colspan="6" class="empty">Dados indisponíveis no momento.</td></tr>`;
-            ['chartSituacao', 'listaCriticos', 'chartCategorias', 'chartEvolucao', 'chartTopValor', 'chartTopSaidas']
+            ['chartSituacao', 'listaCriticos', 'chartCategorias', 'chartEvolucao', 'chartTopSaldo', 'chartTopSaidas']
                 .forEach(id => $(id).innerHTML = graficoVazio('Dados indisponíveis.'));
         }
     }
@@ -37,17 +37,11 @@ function barraKpi(valor, cor, rotulo) {
 function renderKPIs(s) {
     const sit = s.situacao;
     const pctOk = s.itens_ativos ? ((sit.ok + sit.excesso) / s.itens_ativos) * 100 : 0;
-    const saldoMes = s.entradas_mes - s.saidas_mes;
     $('kpis').innerHTML = `
         <div class="kpi accent">
             <div class="kpi-label">Itens ativos</div>
             <div class="kpi-value">${fmtNum(s.itens_ativos)}</div>
             <div class="kpi-sub">${s.itens_arquivados ? `${fmtNum(s.itens_arquivados)} arquivado${s.itens_arquivados > 1 ? 's' : ''}` : 'cadastrados no estoque'}</div>
-        </div>
-        <div class="kpi teal">
-            <div class="kpi-label">Valor em estoque</div>
-            <div class="kpi-value">${fmtMoney(s.valor_total)}</div>
-            <div class="kpi-sub">saldo × custo médio</div>
         </div>
         <div class="kpi ${s.criticos_total ? 'red' : 'green'}">
             <div class="kpi-label">Para repor</div>
@@ -57,21 +51,19 @@ function renderKPIs(s) {
         </div>
         <div class="kpi green">
             <div class="kpi-label">Entradas no mês</div>
-            <div class="kpi-value">${fmtMoney(s.entradas_mes)}</div>
-            <div class="kpi-sub">valor recebido</div>
+            <div class="kpi-value">${fmtNum(s.entradas_mes)}</div>
+            <div class="kpi-sub">lançamentos de recebimento</div>
         </div>
         <div class="kpi amber">
             <div class="kpi-label">Saídas no mês</div>
-            <div class="kpi-value">${fmtMoney(s.saidas_mes)}</div>
-            <div class="kpi-sub">${saldoMes >= 0 ? 'estoque cresceu' : 'estoque caiu'} ${fmtMoneyCurto(Math.abs(saldoMes))}</div>
+            <div class="kpi-value">${fmtNum(s.saidas_mes)}</div>
+            <div class="kpi-sub">lançamentos de saída</div>
         </div>
         <div class="kpi slate">
             <div class="kpi-label">Movimentações no mês</div>
             <div class="kpi-value">${fmtNum(s.movimentos_mes)}</div>
             <div class="kpi-sub">entradas, saídas e ajustes</div>
         </div>`;
-    ajustarValores($('kpis'));
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => ajustarValores($('kpis')));
 }
 
 function renderAtencao(s) {
@@ -100,14 +92,14 @@ function renderGraficos(s) {
     ], 'itens', 'Cadastre itens para ver a situação do estoque.');
     listaCriticos($('listaCriticos'), s.criticos, s.criticos_total);
     graficoRanking($('chartCategorias'), s.categorias.map(c => ({
-        label: c.categoria, value: c.valor, texto: fmtMoneyCurto(c.valor),
-    })), 'var(--primary)', 'Nenhum valor em estoque ainda.');
+        label: c.categoria, value: c.itens, texto: `${fmtNum(c.itens)} ${c.itens === 1 ? 'item' : 'itens'}`,
+    })), 'var(--primary)', 'Nenhum item cadastrado ainda.');
     graficoEvolucao($('chartEvolucao'), s.evolucao);
-    graficoRanking($('chartTopValor'), s.top_valor.map(i => ({
-        label: i.descricao, sub: `${i.codigo} · ${fmtNum(i.saldo)} ${i.unidade}`, value: i.valor_total, texto: fmtMoney(i.valor_total),
-    })), 'var(--liq-strong)', 'Registre entradas com valor para ver este ranking.');
+    graficoRanking($('chartTopSaldo'), s.top_saldo.map(i => ({
+        label: i.descricao, sub: i.codigo, value: i.saldo, texto: `${fmtNum(i.saldo)} ${i.unidade}`,
+    })), 'var(--liq-strong)', 'Registre entradas para ver este ranking.');
     graficoRanking($('chartTopSaidas'), s.top_saidas.map(i => ({
-        label: i.descricao, sub: `${i.codigo} · ${fmtNum(i.qtde)} ${i.unidade} saíram`, value: i.valor, texto: fmtMoney(i.valor),
+        label: i.descricao, sub: i.codigo, value: i.qtde, texto: `${fmtNum(i.qtde)} ${i.unidade}`,
     })), 'var(--amber)', 'Nenhuma saída nos últimos 30 dias.');
 }
 
