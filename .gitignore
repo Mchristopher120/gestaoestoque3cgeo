@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+estoque.db
+.venv/
+venv/
+.env
+.vercel/

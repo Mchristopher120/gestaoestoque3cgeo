@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entrar — Estoque · Aprovisionamento</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" sizes="any">
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon-64.png') }}" type="image/png">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}">
+    <link rel="preload" href="{{ url_for('static', filename='fonts/InterVariable.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='tema.js') }}"></script>
+</head>
+<body class="auth-body">
+    <main class="auth-card">
+        <img class="auth-logo-img" src="{{ url_for('static', filename='img/logistica.png') }}" alt="Logística do Exército Brasileiro" width="120" height="62">
+        <h1>Aprovisionamento</h1>
+        {% if sem_senha %}
+            <p class="muted">O sistema está bloqueado porque nenhuma senha foi configurada.</p>
+            <div class="alert-error" style="text-align:left">
+                <div>
+                    <strong>Para o responsável:</strong>
+                    no Vercel, abra <em>Settings → Environment Variables</em>, crie a variável
+                    <code>APP_PASSWORD</code> com a senha do setor e faça um novo deploy.
+                </div>
+            </div>
+        {% else %}
+            <p class="muted">Gestão de Estoque</p>
+            {% if erro %}<div class="alert-error" role="alert"><div>{{ erro }}</div></div>{% endif %}
+            <form method="post" class="auth-form">
+                <label for="nome">Seu nome</label>
+                <input id="nome" name="nome" value="{{ nome or '' }}" placeholder="ex.: Sgt Silva" autocomplete="name" required maxlength="60" {% if not nome %}autofocus{% endif %}>
+                <span class="hint">Aparece no histórico de alterações.</span>
+                <label for="senha">Senha do setor</label>
+                <input id="senha" name="senha" type="password" autocomplete="current-password" required {% if nome %}autofocus{% endif %}>
+                <button class="btn btn-primary btn-block" type="submit">Entrar</button>
+            </form>
+        {% endif %}
+    </main>
+</body>
+</html>

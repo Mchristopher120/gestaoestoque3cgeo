@@ -1,0 +1,24 @@
+{% from '_icones.html' import icone as ico %}<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block titulo %}Estoque{% endblock %} — Aprovisionamento</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" sizes="any">
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon-64.png') }}" type="image/png">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}">
+    <link rel="preload" href="{{ url_for('static', filename='fonts/InterVariable.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='tema.js') }}"></script>
+</head>
+<body>
+    {% include '_topbar.html' %}
+    <main class="container">
+        {% block conteudo %}{% endblock %}
+    </main>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="{{ url_for('static', filename='icones.js') }}"></script>
+    <script src="{{ url_for('static', filename='ui.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

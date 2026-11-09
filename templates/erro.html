@@ -1,0 +1,24 @@
+{% from '_icones.html' import icone as ico %}<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estoque — Aprovisionamento</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" sizes="any">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='tema.js') }}"></script>
+</head>
+<body class="auth-body">
+    <main class="auth-card">
+        <span class="auth-logo">{{ ico('database-off' if banco_off else 'alert-triangle', 'ico ico-logo') }}</span>
+        {% if banco_off %}
+            <h1>O banco de dados está acordando</h1>
+            <p class="muted">Ele "dorme" após alguns minutos sem uso. Aguarde uns segundos e recarregue.</p>
+        {% else %}
+            <h1>Algo deu errado</h1>
+            <p class="muted">Ocorreu um erro inesperado. Tente de novo; se persistir, avise o responsável pelo sistema.</p>
+        {% endif %}
+        <a href="" class="btn btn-primary btn-block">Recarregar</a>
+    </main>
+</body>
+</html>

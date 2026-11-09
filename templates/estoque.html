@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% set pagina = 'estoque' %}
+{% block titulo %}Estoque{% endblock %}
+{% block conteudo %}
+        <div class="page-head">
+            <div>
+                <h2 class="page-title">Itens em estoque</h2>
+                <p class="page-sub">Cadastro, saldos e situação de cada item</p>
+            </div>
+            <div class="detail-actions">
+                <a href="/importar" class="btn btn-secondary btn-sm">{{ ico('file-upload') }} Importar</a>
+                <button class="btn btn-primary btn-sm" id="btnNovo">{{ ico('plus') }} Novo item</button>
+            </div>
+        </div>
+
+        <section class="card">
+            <div class="toolbar">
+                <input type="search" id="fBusca" class="input" placeholder="Buscar por código, descrição ou local…" aria-label="Buscar item">
+                <select id="fSituacao" class="input" aria-label="Situação">
+                    <option value="">Todas as situações</option>
+                    <option value="repor">Precisam de reposição</option>
+                    <option value="zerado">Zerados</option>
+                    <option value="baixo">Abaixo do mínimo</option>
+                    <option value="ok">Normais</option>
+                    <option value="excesso">Acima do máximo</option>
+                </select>
+                <select id="fCategoria" class="input" aria-label="Categoria"><option value="">Todas as categorias</option></select>
+                <label class="check"><input type="checkbox" id="fArquivados"> Mostrar arquivados</label>
+                <span class="count-badge" id="countBadge">0 itens</span>
+            </div>
+            <div class="table-wrap">
+                <table id="tblItens">
+                    <thead>
+                        <tr>
+                            <th data-key="codigo">Código</th>
+                            <th data-key="descricao" class="text-left">Descrição</th>
+                            <th data-key="categoria">Categoria</th>
+                            <th data-key="saldo" data-default="desc">Saldo</th>
+                            <th data-key="estoque_minimo">Mín.</th>
+                            <th data-key="custo_medio">Custo médio</th>
+                            <th data-key="valor_total" data-default="desc">Valor</th>
+                            <th data-key="situacao">Situação</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyItens"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Cadastro / edição de item -->
+        <div class="modal" id="modalItem" role="dialog" aria-modal="true" aria-labelledby="itemTitulo">
+            <div class="modal-box">
+                <h3 id="itemTitulo">Novo item</h3>
+                <form class="modal-body" id="formItem" autocomplete="off" novalidate>
+                    <div class="grid-2">
+                        <div><label for="iCodigo">Código</label><input id="iCodigo" class="input" maxlength="40" required placeholder="ex.: PAP-A4"></div>
+                        <div><label for="iUnidade">Unidade</label><input id="iUnidade" class="input" maxlength="12" placeholder="UN, CX, RESMA, KG…"></div>
+                    </div>
+                    <label for="iDescricao">Descrição</label>
+                    <input id="iDescricao" class="input" maxlength="200" required>
+                    <div class="grid-2">
+                        <div><label for="iCategoria">Categoria</label><input id="iCategoria" class="input" maxlength="60" list="listaCats"><datalist id="listaCats"></datalist></div>
+                        <div><label for="iLocal">Localização</label><input id="iLocal" class="input" maxlength="60" placeholder="ex.: Prateleira A1"></div>
+                    </div>
+                    <div class="grid-2">
+                        <div><label for="iMin">Estoque mínimo</label><input id="iMin" class="input" inputmode="decimal" placeholder="0"></div>
+                        <div><label for="iMax">Estoque máximo</label><input id="iMax" class="input" inputmode="decimal" placeholder="0"></div>
+                    </div>
+                    <div id="grupoInicial">
+                        <div class="grid-2">
+                            <div><label for="iSaldo">Saldo inicial</label><input id="iSaldo" class="input" inputmode="decimal" placeholder="0"></div>
+                            <div><label for="iValor">Valor unitário (R$)</label><input id="iValor" class="input" inputmode="decimal" placeholder="0,00"></div>
+                        </div>
+                        <p class="campo-ajuda">O saldo inicial vira uma entrada. Depois, o saldo só muda por movimentações.</p>
+                    </div>
+                    <label for="iObs">Observações</label>
+                    <input id="iObs" class="input" maxlength="500">
+                    <div class="alert-error" id="itemErro" role="alert" hidden><div></div></div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-ghost" id="itemCancelar">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" id="itemSalvar">Salvar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Ficha do item (kardex) -->
+        <div class="modal" id="modalFicha" role="dialog" aria-modal="true" aria-labelledby="fichaTitulo">
+            <div class="modal-box modal-large">
+                <div id="fichaCorpo"></div>
+                <div class="modal-actions"><button type="button" class="btn btn-ghost" id="fichaFechar">Fechar</button></div>
+            </div>
+        </div>
+
+        {% include '_modais_mov.html' %}
+{% endblock %}
+{% block scripts %}
+    <script src="{{ url_for('static', filename='mov.js') }}"></script>
+    <script src="{{ url_for('static', filename='estoque.js') }}"></script>
+{% endblock %}

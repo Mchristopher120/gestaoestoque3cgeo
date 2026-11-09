@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% set pagina = 'movimentacoes' %}
+{% block titulo %}Movimentações{% endblock %}
+{% block conteudo %}
+        <div class="page-head">
+            <div>
+                <h2 class="page-title">Movimentações</h2>
+                <p class="page-sub">Entradas, saídas e ajustes de inventário</p>
+            </div>
+            <div class="detail-actions">
+                <button class="btn btn-secondary btn-sm" id="btnSaida">{{ ico('arrow-up') }} Saída</button>
+                <button class="btn btn-primary btn-sm" id="btnEntrada">{{ ico('arrow-down') }} Entrada</button>
+            </div>
+        </div>
+
+        <section class="card">
+            <div class="toolbar">
+                <input type="search" id="fBusca" class="input" placeholder="Buscar item, documento ou origem/destino…" aria-label="Buscar">
+                <select id="fTipo" class="input" aria-label="Tipo">
+                    <option value="">Todos os tipos</option>
+                    <option value="ENTRADA">Entradas</option>
+                    <option value="SAIDA">Saídas</option>
+                    <option value="AJUSTE">Ajustes</option>
+                </select>
+                <label class="check">De <input type="date" id="fDe" class="input"></label>
+                <label class="check">até <input type="date" id="fAte" class="input"></label>
+                <span class="count-badge" id="countBadge">0 registros</span>
+            </div>
+            <div class="table-wrap">
+                <table id="tblMov">
+                    <thead>
+                        <tr>
+                            <th data-key="data" data-default="desc">Data</th>
+                            <th data-key="tipo">Tipo</th>
+                            <th data-key="descricao" class="text-left">Item</th>
+                            <th data-key="qtde">Quantidade</th>
+                            <th data-key="valor_total">Valor</th>
+                            <th data-key="documento">Documento</th>
+                            <th data-key="contraparte">Origem / Destino</th>
+                            <th data-key="usuario">Usuário</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyMov"></tbody>
+                </table>
+            </div>
+            <p class="muted small mt-small">Mostrando as 1.000 movimentações mais recentes. Para corrigir um lançamento errado, use o estorno e lance de novo — o histórico guarda os dois.</p>
+        </section>
+
+        {% include '_modais_mov.html' %}
+{% endblock %}
+{% block scripts %}
+    <script src="{{ url_for('static', filename='mov.js') }}"></script>
+    <script src="{{ url_for('static', filename='movimentacoes.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% set pagina = 'historico' %}
+{% block titulo %}Histórico{% endblock %}
+{% block conteudo %}
+        <div class="page-head">
+            <div>
+                <h2 class="page-title">Histórico de alterações</h2>
+                <p class="page-sub">Quem fez o quê, e quando</p>
+            </div>
+        </div>
+        <section class="card">
+            <div class="toolbar">
+                <input type="search" id="hBusca" class="input" placeholder="Buscar na descrição ou no usuário…" aria-label="Buscar">
+                <select id="hAcao" class="input" aria-label="Tipo de ação">
+                    <option value="">Todas as ações</option>
+                    <option value="CRIAR">Cadastros</option>
+                    <option value="EDITAR">Edições</option>
+                    <option value="EXCLUIR">Exclusões</option>
+                    <option value="ENTRADA">Entradas</option>
+                    <option value="SAIDA">Saídas</option>
+                    <option value="AJUSTE">Ajustes</option>
+                    <option value="ESTORNAR">Estornos</option>
+                    <option value="IMPORTAR">Importações</option>
+                    <option value="EXPORTAR">Exportações</option>
+                    <option value="LOGIN">Acessos</option>
+                </select>
+                <select id="hUsuario" class="input" aria-label="Usuário"><option value="">Todos os usuários</option></select>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Quando</th><th>Usuário</th><th>Ação</th><th class="text-left">Descrição</th></tr></thead>
+                    <tbody id="tbodyHist"></tbody>
+                </table>
+            </div>
+            <p class="muted small mt-small">Mostrando os 1.000 registros mais recentes.</p>
+        </section>
+{% endblock %}
+{% block scripts %}
+    <script src="{{ url_for('static', filename='historico.js') }}"></script>
+{% endblock %}

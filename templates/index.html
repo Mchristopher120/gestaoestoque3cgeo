@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% set pagina = 'dashboard' %}
+{% block titulo %}Painel{% endblock %}
+{% block conteudo %}
+        <div id="erroBox" class="alert-error" hidden>
+            <div>
+                <strong>Não foi possível carregar os dados.</strong>
+                <span id="erroMsg"></span>
+            </div>
+            <button id="btnTentar" class="btn btn-sm btn-primary">Tentar novamente</button>
+        </div>
+
+        <div class="page-head">
+            <div>
+                <h2 class="page-title">Visão geral do estoque</h2>
+                <p class="page-sub">Saldos, reposição e movimentação do Setor de Aprovisionamento</p>
+            </div>
+            <div class="detail-actions">
+                <button id="btnRefresh" class="btn btn-secondary btn-sm" title="Atualizar dados">{{ ico('refresh') }} Atualizar</button>
+                <a href="/estoque?novo=1" class="btn btn-primary btn-sm">{{ ico('plus') }} Novo item</a>
+            </div>
+        </div>
+
+        <section class="faixa-atencao" id="atencao" aria-label="Precisa de atenção"></section>
+        <section class="kpis" id="kpis"></section>
+
+        <section class="charts-grid charts-3">
+            <div class="card">
+                <div class="card-title">Situação dos itens</div>
+                <div class="card-sub">Itens ativos em relação ao mínimo e ao máximo</div>
+                <div id="chartSituacao" class="chart-box"></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Itens para repor</div>
+                <div class="card-sub">Zerados e abaixo do estoque mínimo</div>
+                <div id="listaCriticos" class="chart-box"></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Valor por categoria</div>
+                <div class="card-sub">Quanto está parado em cada categoria</div>
+                <div id="chartCategorias" class="chart-box"></div>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="chart-head">
+                <div>
+                    <div class="card-title">Entradas × Saídas</div>
+                    <div class="card-sub">Valor movimentado por mês, nos últimos 12 meses</div>
+                </div>
+                <div class="legend">
+                    <span><i style="background:var(--liq)"></i>Entradas</span>
+                    <span><i style="background:var(--amber)"></i>Saídas</span>
+                </div>
+            </div>
+            <div id="chartEvolucao"></div>
+        </section>
+
+        <section class="charts-grid">
+            <div class="card">
+                <div class="card-title">Maior valor em estoque</div>
+                <div class="card-sub">Top 5 itens por saldo × custo médio</div>
+                <div id="chartTopValor" class="chart-box"></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Mais consumidos (30 dias)</div>
+                <div class="card-sub">Top 5 itens por valor de saída</div>
+                <div id="chartTopSaidas" class="chart-box"></div>
+            </div>
+        </section>
+
+        <section class="card table-card">
+            <div class="table-head">
+                <h3>Últimas movimentações</h3>
+                <a href="/movimentacoes" class="btn btn-secondary btn-sm">Ver todas</a>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Data</th><th>Tipo</th><th class="text-left">Item</th><th>Quantidade</th><th>Documento</th><th>Usuário</th></tr></thead>
+                    <tbody id="tbodyUltimas"></tbody>
+                </table>
+            </div>
+        </section>
+{% endblock %}
+{% block scripts %}
+    <script src="{{ url_for('static', filename='charts.js') }}"></script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+{% endblock %}

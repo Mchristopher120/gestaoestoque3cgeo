@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% set pagina = 'estoque' %}
+{% block titulo %}Importar{% endblock %}
+{% block conteudo %}
+        <div class="page-head">
+            <div>
+                <h2 class="page-title">Importar planilha</h2>
+                <p class="page-sub">Cadastre vários itens de uma vez (Excel ou CSV)</p>
+            </div>
+            <a href="/api/importar/modelo.xlsx" class="btn btn-secondary btn-sm">{{ ico('download') }} Baixar modelo</a>
+        </div>
+
+        <section class="card">
+            <form id="formImp" class="import-form">
+                <label class="dropzone" id="dropzone" tabindex="0">
+                    <input type="file" id="arquivo" accept=".xlsx,.xlsm,.csv">
+                    <span class="dropzone-ico">{{ ico('file-spreadsheet') }}</span>
+                    <span class="dropzone-txt">
+                        <strong id="nomeArquivo">Escolha ou arraste a planilha aqui</strong>
+                        <span class="muted small">.xlsx ou .csv · até 2.000 itens</span>
+                    </span>
+                </label>
+                <button class="btn btn-primary" type="submit" id="btnEnviar" disabled>{{ ico('file-upload') }} Importar</button>
+            </form>
+            <ol class="import-passos">
+                <li>Baixe o modelo e preencha uma linha por item. Só <strong>Código</strong> e <strong>Descrição</strong> são obrigatórios.</li>
+                <li>Se o código já existir, os dados do cadastro são <strong>atualizados</strong> (o saldo não muda).</li>
+                <li>Itens novos entram com o <strong>Saldo inicial</strong> e o <strong>Valor unitário</strong> informados.</li>
+            </ol>
+        </section>
+        <div id="resultado"></div>
+{% endblock %}
+{% block scripts %}
+    <script src="{{ url_for('static', filename='importar.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,75 @@
+{% from '_icones.html' import icone as ico %}
+<header class="topbar">
+    <a href="/" class="brand" title="Ir para o painel">
+        <img class="logo-img" src="{{ url_for('static', filename='img/logistica.png') }}" alt="" width="70" height="36">
+        <span class="brand-txt">
+            <span class="brand-nome">Aprovisionamento</span>
+            <span class="brand-sub">Gestão de Estoque · 3º CGEO</span>
+        </span>
+    </a>
+
+    <button type="button" class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navPrincipal" aria-label="Abrir menu">
+        {{ ico('menu-2') }}
+    </button>
+
+    <nav class="topbar-nav" id="navPrincipal" aria-label="Navegação principal">
+        <a href="/" class="nav-link {{ 'active' if pagina == 'dashboard' }}" {% if pagina == 'dashboard' %}aria-current="page"{% endif %}>{{ ico('home') }}Painel</a>
+        <a href="/estoque" class="nav-link {{ 'active' if pagina == 'estoque' }}" {% if pagina == 'estoque' %}aria-current="page"{% endif %}>{{ ico('package') }}Estoque<span class="nav-cont" id="navPend" hidden></span></a>
+        <a href="/movimentacoes" class="nav-link {{ 'active' if pagina == 'movimentacoes' }}" {% if pagina == 'movimentacoes' %}aria-current="page"{% endif %}>{{ ico('arrows-exchange') }}Movimentações</a>
+        <a href="/historico" class="nav-link {{ 'active' if pagina == 'historico' }}" {% if pagina == 'historico' %}aria-current="page"{% endif %}>{{ ico('history') }}Histórico</a>
+    </nav>
+
+    <div class="user-menu">
+        <button type="button" class="avatar-btn" id="userBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="userMenu"
+                title="{{ ('Conectado como ' ~ usuario) if usuario else 'Menu' }}">
+            <span class="avatar">{{ iniciais }}</span>{{ ico('chevron-down', 'ico ico-chev') }}
+        </button>
+        <div class="dropdown" id="userMenu" role="menu" hidden>
+            <div class="dropdown-head">
+                {% if usuario %}<strong>{{ usuario }}</strong><span>Setor de Aprovisionamento</span>
+                {% else %}<strong>Modo local</strong><span>Sem senha configurada</span>{% endif %}
+            </div>
+            <a href="/api/exportar.xlsx" class="dropdown-item" role="menuitem">{{ ico('file-spreadsheet') }}Exportar Excel</a>
+            <a href="/importar" class="dropdown-item" role="menuitem">{{ ico('file-upload') }}Importar planilha</a>
+            <button type="button" id="btnTema" class="dropdown-item btn-tema" role="menuitem">
+                {{ ico('device-desktop', 'ico tema-auto') }}{{ ico('moon', 'ico tema-dark') }}{{ ico('sun', 'ico tema-light') }}Tema: <span class="tema-rotulo">Automático</span>
+            </button>
+            {% if auth_ativa %}
+            <div class="dropdown-sep" role="separator"></div>
+            <a href="/logout" class="dropdown-item" role="menuitem">{{ ico('logout') }}Sair</a>
+            {% endif %}
+        </div>
+    </div>
+</header>
+{% if not auth_ativa %}
+<div class="banner-aviso">{{ ico('alert-triangle') }} Modo local sem senha. Para exigir login, defina a variável <code>APP_PASSWORD</code>.</div>
+{% endif %}
+<script>
+/* Menu do usuário e menu ☰ do celular (sem dependências) */
+(function () {
+    var btn = document.getElementById('userBtn'), menu = document.getElementById('userMenu');
+    var tog = document.getElementById('navToggle'), nav = document.getElementById('navPrincipal');
+    function fecharMenu() { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); }
+    btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var abrir = menu.hidden;
+        menu.hidden = !abrir;
+        btn.setAttribute('aria-expanded', String(abrir));
+        if (abrir) { var p = menu.querySelector('.dropdown-item'); if (p) p.focus(); }
+    });
+    menu.addEventListener('click', function (e) { e.stopPropagation(); });
+    tog.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var aberto = nav.classList.toggle('aberto');
+        tog.setAttribute('aria-expanded', String(aberto));
+        tog.setAttribute('aria-label', aberto ? 'Fechar menu' : 'Abrir menu');
+    });
+    document.addEventListener('click', function () {
+        fecharMenu();
+        if (nav.classList.contains('aberto')) { nav.classList.remove('aberto'); tog.setAttribute('aria-expanded', 'false'); }
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !menu.hidden) { fecharMenu(); btn.focus(); }
+    });
+})();
+</script>
