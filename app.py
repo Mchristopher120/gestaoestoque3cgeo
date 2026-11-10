@@ -1175,6 +1175,24 @@ def api_importar():
                                (d["descricao"], d["categoria"], d["unidade"], d["localizacao"],
                                 d["estoque_minimo"], d["estoque_maximo"], d["prazo_entrega"], existentes[chave]))
                     atualizados += 1
+                    # Reimportar com saldo/data do saldo inicial corrige o saldo inicial, mas só se o item
+                    # ainda não teve nenhuma outra movimentação (nada é reescrito no histórico real).
+                    if col("saldo_inicial") not in (None, "") or col("data_saldo") not in (None, ""):
+                        iid = existentes[chave]
+                        movs = db.execute("SELECT id, tipo, qtde, data, observacoes FROM movimentos WHERE item_id = ?",
+                                          (iid,)).fetchall()
+                        if len(movs) == 1 and movs[0]["tipo"] == "ENTRADA" and movs[0]["observacoes"] == "Saldo inicial importado":
+                            novo_saldo = parse_num(col("saldo_inicial")) if col("saldo_inicial") not in (None, "") else float(movs[0]["qtde"])
+                            bruto = col("data_saldo")
+                            if hasattr(bruto, "strftime"):
+                                bruto = bruto.strftime("%Y-%m-%d")
+                            nova_data = parse_data(str(bruto)) if bruto not in (None, "") else movs[0]["data"]
+                            if novo_saldo <= EPS or nova_data > hoje():
+                                erros.append(f"Linha {n}: saldo inicial deve ser maior que zero e a data não pode ser futura.")
+                            else:
+                                db.execute("UPDATE movimentos SET qtde = ?, data = ? WHERE id = ?",
+                                           (novo_saldo, nova_data, movs[0]["id"]))
+                                recalcular_item(db, iid)
                 else:
                     saldo = parse_num(col("saldo_inicial"))
                     if saldo < 0:
