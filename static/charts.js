@@ -106,3 +106,43 @@ function listaCriticos(el, itens, total) {
         </a></li>`).join('')}</ul>
         ${total > itens.length ? `<p class="muted small">+ ${total - itens.length} outro(s) — veja em Estoque.</p>` : ''}`;
 }
+
+/** Curva ABC (Pareto): barras = % do consumo de cada item; linha = % acumulado. itens: [{codigo, descricao, pct, pct_acum, classe, consumo, unidade}] */
+function graficoPareto(el, itens, msgVazio) {
+    const lista = itens.filter(i => i.classe).slice(0, 25);
+    if (!lista.length) { el.innerHTML = graficoVazio(msgVazio || 'Sem saídas no período para montar a curva.'); return; }
+    const W = 900, H = 330, ML = 46, MR = 46, MT = 14, MB = 78;
+    const pw = W - ML - MR, ph = H - MT - MB;
+    const maxPct = Math.max(5, Math.ceil(Math.max(...lista.map(i => i.pct)) / 5) * 5);
+    const bw = pw / lista.length;
+    const COR = { A: 'var(--primary)', B: 'var(--amber)', C: '#8a94a8' };
+    const yR = v => MT + ph - (v / 100) * ph;          // eixo direito: % acumulado
+    const yL = v => MT + ph - (v / maxPct) * ph;       // eixo esquerdo: % individual
+    const barras = lista.map((i, k) => {
+        const x = ML + k * bw + bw * 0.14, w = bw * 0.72, y = yL(i.pct);
+        return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${(MT + ph - y).toFixed(1)}" rx="2" fill="${COR[i.classe]}" opacity=".9">
+            <title>${escapeHTML(i.codigo)} — ${escapeHTML(i.descricao)}\nClasse ${i.classe} · ${fmtNum(i.consumo)} ${escapeHTML(i.unidade)} (${pct(i.pct)})\nAcumulado: ${pct(i.pct_acum)}</title></rect>`;
+    }).join('');
+    const pts = lista.map((i, k) => `${(ML + k * bw + bw / 2).toFixed(1)},${yR(i.pct_acum).toFixed(1)}`);
+    const linha = `<polyline points="${pts.join(' ')}" fill="none" stroke="var(--text)" stroke-width="2" stroke-linejoin="round" opacity=".75"/>` +
+        pts.map(p => `<circle cx="${p.split(',')[0]}" cy="${p.split(',')[1]}" r="3" fill="var(--text)" opacity=".75"/>`).join('');
+    const rotulos = lista.map((i, k) => {
+        const x = ML + k * bw + bw / 2;
+        return `<text x="${x.toFixed(1)}" y="${MT + ph + 12}" transform="rotate(-45 ${x.toFixed(1)} ${MT + ph + 12})" text-anchor="end" class="pareto-lbl">${escapeHTML(i.codigo)}</text>`;
+    }).join('');
+    const gradeR = [0, 20, 40, 60, 80, 100].map(v => `<line x1="${ML}" x2="${W - MR}" y1="${yR(v)}" y2="${yR(v)}" class="pareto-grid"/>
+        <text x="${W - MR + 6}" y="${yR(v) + 4}" class="pareto-ax">${v}%</text>`).join('');
+    const ticksL = [0, 0.25, 0.5, 0.75, 1].map(f => `<text x="${ML - 6}" y="${yL(maxPct * f) + 4}" text-anchor="end" class="pareto-ax">${Math.round(maxPct * f)}%</text>`).join('');
+    const ref = [80, 95].map(v => `<line x1="${ML}" x2="${W - MR}" y1="${yR(v)}" y2="${yR(v)}" class="pareto-ref"/>`).join('');
+    el.innerHTML = `
+    <div class="pareto-scroll"><svg viewBox="0 0 ${W} ${H}" class="pareto" role="img" aria-label="Curva ABC: % do consumo por item e % acumulado">
+        ${gradeR}${ref}${barras}${linha}${ticksL}${rotulos}
+    </svg></div>
+    <div class="legend">
+        <span><i style="background:var(--primary)"></i>Classe A (até 80%)</span>
+        <span><i style="background:var(--amber)"></i>Classe B (até 95%)</span>
+        <span><i style="background:#8a94a8"></i>Classe C (resto)</span>
+        <span><i style="background:var(--text);opacity:.75;height:3px;border-radius:2px"></i>% acumulado (eixo direito)</span>
+    </div>
+    ${itens.filter(i => i.classe).length > lista.length ? `<p class="muted small">Mostrando os ${lista.length} itens de maior consumo.</p>` : ''}`;
+}

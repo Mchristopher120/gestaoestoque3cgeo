@@ -15,6 +15,7 @@
     <nav class="topbar-nav" id="navPrincipal" aria-label="Navegação principal">
         <a href="/" class="nav-link {{ 'active' if pagina == 'dashboard' }}" {% if pagina == 'dashboard' %}aria-current="page"{% endif %}>{{ ico('home') }}Painel</a>
         <a href="/estoque" class="nav-link {{ 'active' if pagina == 'estoque' }}" {% if pagina == 'estoque' %}aria-current="page"{% endif %}>{{ ico('package') }}Estoque<span class="nav-cont" id="navPend" hidden></span></a>
+        <a href="/reposicao" class="nav-link {{ 'active' if pagina == 'reposicao' }}" {% if pagina == 'reposicao' %}aria-current="page"{% endif %}>{{ ico('chart-bar') }}Reposição</a>
         <a href="/movimentacoes" class="nav-link {{ 'active' if pagina == 'movimentacoes' }}" {% if pagina == 'movimentacoes' %}aria-current="page"{% endif %}>{{ ico('arrows-exchange') }}Movimentações</a>
         <a href="/historico" class="nav-link {{ 'active' if pagina == 'historico' }}" {% if pagina == 'historico' %}aria-current="page"{% endif %}>{{ ico('history') }}Histórico</a>
     </nav>

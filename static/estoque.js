@@ -72,7 +72,7 @@ function abrirItem(item = null) {
     if (item) {
         $('iCodigo').value = item.codigo; $('iDescricao').value = item.descricao; $('iUnidade').value = item.unidade;
         $('iCategoria').value = item.categoria || ''; $('iLocal').value = item.localizacao || '';
-        $('iMin').value = item.estoque_minimo || ''; $('iMax').value = item.estoque_maximo || ''; $('iObs').value = item.observacoes || '';
+        $('iMin').value = item.estoque_minimo || ''; $('iMax').value = item.estoque_maximo || ''; $('iPrazo').value = item.prazo_entrega || ''; $('iObs').value = item.observacoes || '';
     } else { $('iUnidade').value = 'UN'; }
     abrirModal('modalItem');
 }
@@ -81,7 +81,7 @@ async function salvarItem(ev) {
     ev.preventDefault();
     const corpo = {
         codigo: $('iCodigo').value, descricao: $('iDescricao').value, unidade: $('iUnidade').value, categoria: $('iCategoria').value,
-        localizacao: $('iLocal').value, estoque_minimo: $('iMin').value, estoque_maximo: $('iMax').value, observacoes: $('iObs').value,
+        localizacao: $('iLocal').value, estoque_minimo: $('iMin').value, estoque_maximo: $('iMax').value, prazo_entrega: $('iPrazo').value, observacoes: $('iObs').value,
     };
     if (!E.editando) { corpo.saldo_inicial = $('iSaldo').value; }
     const btn = $('itemSalvar');
@@ -116,6 +116,7 @@ async function abrirFicha(id, abrir = true) {
                     ${chip('Saldo', `${fmtNum(i.saldo)} ${escapeHTML(i.unidade)}`, i.situacao === 'zerado' ? 'chip-red' : i.situacao === 'baixo' ? 'chip-amber' : 'chip-green')}
                     ${i.estoque_minimo ? chip('Mínimo', fmtNum(i.estoque_minimo)) : ''}
                     ${i.estoque_maximo ? chip('Máximo', fmtNum(i.estoque_maximo)) : ''}
+                    ${i.prazo_entrega ? chip('Prazo de entrega', i.prazo_entrega + ' dia(s)') : ''}
                     ${i.categoria ? chip('Categoria', escapeHTML(i.categoria)) : ''}
                     ${i.localizacao ? chip('Local', escapeHTML(i.localizacao)) : ''}
                 </div>

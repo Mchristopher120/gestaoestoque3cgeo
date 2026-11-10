@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% set pagina = 'reposicao' %}
+{% block titulo %}Reposição{% endblock %}
+{% block conteudo %}
+        <div class="page-head">
+            <div>
+                <h2 class="page-title">Reposição e curva ABC</h2>
+                <p class="page-sub">Quanto pedir, quando pedir e quais itens merecem mais atenção</p>
+            </div>
+            <div class="detail-actions">
+                <label class="check">Período
+                    <select id="selJanela" class="input" aria-label="Período de análise">
+                        <option value="30">30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option>
+                        <option value="180">180 dias</option><option value="365">12 meses</option>
+                    </select>
+                </label>
+                <button class="btn btn-secondary btn-sm" id="btnParam">{{ ico('adjustments') }} Parâmetros</button>
+                <a class="btn btn-secondary btn-sm" id="btnExport" href="/api/reposicao.xlsx">{{ ico('file-spreadsheet') }} Exportar</a>
+            </div>
+        </div>
+
+        <div id="avisoPrazo" class="banner-aviso" hidden></div>
+        <section class="kpis" id="abcCards"></section>
+
+        <section class="card">
+            <div class="chart-head">
+                <div>
+                    <div class="card-title">Curva ABC — consumo por item</div>
+                    <div class="card-sub" id="subPareto">Itens ordenados pela quantidade que saiu no período</div>
+                </div>
+            </div>
+            <div id="chartPareto"></div>
+        </section>
+
+        <details class="card como-calcula">
+            <summary>{{ ico('chart-bar') }} Como os números são calculados</summary>
+            <ul>
+                <li><strong>Curva ABC:</strong> os itens são ordenados pela quantidade que saiu no período. <strong>A</strong> são os que somam até 80% do consumo, <strong>B</strong> até 95% e <strong>C</strong> o restante. Como o sistema não trabalha com valores (R$), a classificação é por quantidade, e isso soma unidades diferentes (resma, caixa, unidade).</li>
+                <li><strong>Consumo médio diário (d):</strong> total de saídas ÷ dias do período. Para itens novos, contam só os dias desde a primeira movimentação.</li>
+                <li><strong>Estoque de segurança</strong> = Z × σ × √L, em que σ é o desvio padrão do consumo diário, L é o prazo de entrega em dias e Z vem do nível de serviço (A 98%, B 95%, C 90%, ajustáveis em Parâmetros).</li>
+                <li><strong>Ponto de pedido</strong> = d × L + estoque de segurança. Quando o saldo chega a esse valor, é hora de pedir ao fornecedor.</li>
+                <li><strong>Quantidade sugerida:</strong> estoque máximo − saldo atual (só aparece se o item tem estoque máximo definido).</li>
+                <li>Itens com menos de 30 dias de histórico aparecem com um aviso, porque o cálculo ainda é pouco confiável.</li>
+            </ul>
+        </details>
+
+        <section class="card">
+            <div class="toolbar">
+                <input type="search" id="fBusca" class="input" placeholder="Buscar item ou código…" aria-label="Buscar item">
+                <select id="fClasse" class="input" aria-label="Classe">
+                    <option value="">Todas as classes</option>
+                    <option value="A">Classe A</option><option value="B">Classe B</option><option value="C">Classe C</option>
+                    <option value="-">Sem consumo</option>
+                </select>
+                <label class="check"><input type="checkbox" id="fPedir"> Só os que pedem reposição</label>
+                <span class="count-badge" id="countBadge">0 itens</span>
+            </div>
+            <div class="table-wrap">
+                <table id="tblRep">
+                    <thead>
+                        <tr>
+                            <th data-key="ord_classe">Classe</th>
+                            <th data-key="descricao" class="text-left">Item</th>
+                            <th data-key="saldo">Saldo</th>
+                            <th data-key="consumo_dia">Consumo por dia</th>
+                            <th data-key="prazo">Prazo (dias)</th>
+                            <th data-key="seguranca">Segurança</th>
+                            <th data-key="ponto_pedido">Ponto de pedido</th>
+                            <th data-key="cobertura_dias">Cobertura (dias)</th>
+                            <th data-key="ord_sit">Situação</th>
+                            <th data-key="qtd_sugerida">Sugestão</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyRep"></tbody>
+                </table>
+            </div>
+            <p class="muted small mt-small">Preencha o <strong>prazo de entrega</strong> de cada item direto na tabela. Sem prazo, não há como calcular o ponto de pedido.</p>
+        </section>
+
+        <div class="modal" id="modalParam" role="dialog" aria-modal="true" aria-labelledby="paramTitulo">
+            <div class="modal-box">
+                <h3 id="paramTitulo">Parâmetros de reposição</h3>
+                <form class="modal-body" id="formParam" autocomplete="off" novalidate>
+                    <p class="campo-ajuda">O <strong>nível de serviço</strong> é a chance de o item não faltar durante o prazo de entrega. Quanto maior, maior o estoque de segurança. Itens A costumam ter nível mais alto.</p>
+                    <div class="grid-2">
+                        <div><label for="nsA">Classe A (%)</label><input id="nsA" class="input" inputmode="decimal"></div>
+                        <div><label for="nsB">Classe B (%)</label><input id="nsB" class="input" inputmode="decimal"></div>
+                    </div>
+                    <label for="nsC">Classe C (%)</label>
+                    <input id="nsC" class="input" inputmode="decimal">
+                    <div class="alert-error" id="paramErro" role="alert" hidden><div></div></div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-ghost" id="paramCancelar">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Salvar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+{% endblock %}
+{% block scripts %}
+    <script src="{{ url_for('static', filename='charts.js') }}"></script>
+    <script src="{{ url_for('static', filename='reposicao.js') }}"></script>
+{% endblock %}

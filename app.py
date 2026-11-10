@@ -7,6 +7,7 @@ import csv
 import hashlib
 import hmac
 import io
+import math
 import os
 import re
 import secrets
@@ -14,6 +15,7 @@ import sys
 import time
 import unicodedata
 from datetime import date, datetime, timedelta
+from statistics import NormalDist
 
 from flask import (Flask, g, jsonify, redirect, render_template, request,
                    send_file, session, url_for)
@@ -145,6 +147,7 @@ SCHEMA = [
         localizacao TEXT,
         estoque_minimo {REAL} DEFAULT 0,
         estoque_maximo {REAL} DEFAULT 0,
+        prazo_entrega INTEGER DEFAULT 0,
         ativo INTEGER DEFAULT 1,
         observacoes TEXT,
         criado_em TEXT)""",
@@ -169,6 +172,8 @@ SCHEMA = [
         entidade_id INTEGER, item_id INTEGER, descricao TEXT)""",
     f"""CREATE TABLE IF NOT EXISTS login_falhas (
         id {PK}, ip TEXT, quando TEXT)""",
+    f"""CREATE TABLE IF NOT EXISTS config (
+        id {PK}, chave TEXT UNIQUE, valor TEXT)""",
 ]
 
 
@@ -177,6 +182,13 @@ def init_db():
     try:
         for s in SCHEMA:
             con.execute(s)
+        # Bancos criados em versões anteriores: acrescenta a coluna do prazo de entrega.
+        if USE_POSTGRES:
+            con.execute("ALTER TABLE itens ADD COLUMN IF NOT EXISTS prazo_entrega INTEGER DEFAULT 0")
+        else:
+            cols = [r[1] for r in con.execute("PRAGMA table_info(itens)").fetchall()]
+            if "prazo_entrega" not in cols:
+                con.execute("ALTER TABLE itens ADD COLUMN prazo_entrega INTEGER DEFAULT 0")
         con.commit()
     finally:
         con.close()
@@ -428,6 +440,7 @@ def completar_item(r):
     minimo, maximo = float(d["estoque_minimo"] or 0), float(d["estoque_maximo"] or 0)
     d["saldo"] = round(saldo, 6)
     d["estoque_minimo"], d["estoque_maximo"] = minimo, maximo
+    d["prazo_entrega"] = int(d.get("prazo_entrega") or 0)
     d["situacao"] = situacao(saldo, minimo, maximo)
     d["ativo"] = bool(d["ativo"])
     # sugestão de reposição: o que falta para chegar ao máximo (ou ao dobro do mínimo)
@@ -454,16 +467,19 @@ def dados_item(data):
         return None, "Informe a descrição do item."
     try:
         minimo, maximo = parse_num(data.get("estoque_minimo")), parse_num(data.get("estoque_maximo"))
+        prazo = parse_num(data.get("prazo_entrega"))
     except ValueError as e:
         return None, str(e)
     if minimo < 0 or maximo < 0:
         return None, "Estoque mínimo e máximo não podem ser negativos."
+    if prazo < 0 or prazo > 365 or prazo != int(prazo):
+        return None, "O prazo de entrega deve ser um número inteiro de dias (0 a 365)."
     if maximo and minimo and maximo < minimo:
         return None, "O estoque máximo não pode ser menor que o mínimo."
     return {
         "codigo": codigo, "descricao": descricao,
         "categoria": txt(data.get("categoria"), 60), "unidade": txt(data.get("unidade"), 12).upper() or "UN",
-        "localizacao": txt(data.get("localizacao"), 60), "estoque_minimo": minimo, "estoque_maximo": maximo,
+        "localizacao": txt(data.get("localizacao"), 60), "estoque_minimo": minimo, "estoque_maximo": maximo, "prazo_entrega": int(prazo),
         "observacoes": txt(data.get("observacoes"), 500),
     }, None
 
@@ -539,9 +555,9 @@ def api_criar_item():
     try:
         cur = db.execute(
             "INSERT INTO itens (codigo, descricao, categoria, unidade, localizacao, estoque_minimo,"
-            " estoque_maximo, ativo, observacoes, criado_em) VALUES (?,?,?,?,?,?,?,1,?,?)",
+            " estoque_maximo, prazo_entrega, ativo, observacoes, criado_em) VALUES (?,?,?,?,?,?,?,?,1,?,?)",
             (d["codigo"], d["descricao"], d["categoria"], d["unidade"], d["localizacao"],
-             d["estoque_minimo"], d["estoque_maximo"], d["observacoes"], agora()))
+             d["estoque_minimo"], d["estoque_maximo"], d["prazo_entrega"], d["observacoes"], agora()))
         iid = cur.lastrowid
         if saldo_ini > EPS:
             inserir_movimento(db, iid, "ENTRADA", saldo_ini, dt, "Saldo inicial", "", "")
@@ -585,9 +601,9 @@ def api_editar_item(iid):
         return erro(f"Já existe outro item com o código {d['codigo']}.", 409)
     db.execute(
         "UPDATE itens SET codigo=?, descricao=?, categoria=?, unidade=?, localizacao=?, estoque_minimo=?,"
-        " estoque_maximo=?, observacoes=? WHERE id=?",
+        " estoque_maximo=?, prazo_entrega=?, observacoes=? WHERE id=?",
         (d["codigo"], d["descricao"], d["categoria"], d["unidade"], d["localizacao"],
-         d["estoque_minimo"], d["estoque_maximo"], d["observacoes"], iid))
+         d["estoque_minimo"], d["estoque_maximo"], d["prazo_entrega"], d["observacoes"], iid))
     registrar(db, "EDITAR", "item", iid, iid, f"Editou o item {d['codigo']} — {d['descricao']}")
     db.commit()
     return jsonify({"ok": True})
@@ -789,6 +805,7 @@ def api_stats():
         "situacao": cont,
         "movimentos_mes": n_mes, "entradas_mes": ent_mes, "saidas_mes": sai_mes,
         "criticos_total": len(criticos),
+        "no_ponto_pedido": analise_reposicao(db)["pedir"],
         "criticos": [{k: c[k] for k in ("id", "codigo", "descricao", "unidade", "saldo", "estoque_minimo",
                                           "situacao", "repor", "localizacao")} for c in criticos[:8]],
         "top_saldo": [{"id": i["id"], "codigo": i["codigo"], "descricao": i["descricao"], "unidade": i["unidade"],
@@ -823,6 +840,193 @@ def api_historico():
     return jsonify([dict(r) for r in rows])
 
 
+
+# ============================================================================
+# Reposição: curva ABC, estoque de segurança e ponto de pedido
+# ============================================================================
+CONFIG_PADRAO = {"janela": 180, "ns_A": 98.0, "ns_B": 95.0, "ns_C": 90.0}
+JANELAS = (30, 60, 90, 180, 365)
+
+
+def ler_config(db):
+    cfg = dict(CONFIG_PADRAO)
+    for r in db.execute("SELECT chave, valor FROM config").fetchall():
+        if r["chave"] in cfg:
+            try:
+                cfg[r["chave"]] = float(r["valor"])
+            except (TypeError, ValueError):
+                pass
+    cfg["janela"] = int(cfg["janela"])
+    return cfg
+
+
+def _ceil(x):
+    return float(math.ceil(round(x, 6)))
+
+
+def analise_reposicao(db, janela=None):
+    """Para cada item ativo: classe ABC (por quantidade consumida), consumo médio diário,
+    estoque de segurança  SS = Z · σ · √L   e ponto de pedido  PP = d · L + SS."""
+    cfg = ler_config(db)
+    W = int(janela or cfg["janela"])
+    hj = date.today()
+    ini = (hj - timedelta(days=W - 1)).strftime("%Y-%m-%d")
+    itens = [completar_item(r) for r in db.execute(SQL_ITENS + " WHERE i.ativo = 1").fetchall()]
+    primeiro = {r["item_id"]: r["d"] for r in db.execute(
+        "SELECT item_id, MIN(data) AS d FROM movimentos GROUP BY item_id").fetchall()}
+    diario = {}
+    for r in db.execute("SELECT item_id, data, qtde FROM movimentos WHERE tipo = 'SAIDA' AND data >= ?", (ini,)).fetchall():
+        dd = diario.setdefault(r["item_id"], {})
+        dd[r["data"]] = dd.get(r["data"], 0.0) + abs(float(r["qtde"]))
+
+    linhas = []
+    for it in itens:
+        vals = list((diario.get(it["id"]) or {}).values())
+        total = sum(vals)
+        pri = primeiro.get(it["id"])
+        hist = (hj - date.fromisoformat(pri[:10])).days + 1 if pri else 1
+        n = max(1, min(W, hist))  # itens novos: só conta os dias que existem de histórico
+        media = total / n
+        if n > 1:
+            var = max(0.0, (sum(v * v for v in vals) - n * media * media) / (n - 1))
+        else:
+            var = 0.0
+        linhas.append({
+            "id": it["id"], "codigo": it["codigo"], "descricao": it["descricao"], "unidade": it["unidade"],
+            "categoria": it["categoria"], "saldo": it["saldo"], "estoque_maximo": it["estoque_maximo"],
+            "prazo": it["prazo_entrega"], "consumo": round(total, 3), "dias_base": n,
+            "consumo_dia": round(media, 4), "desvio_dia": round(math.sqrt(var), 4),
+            "poucos_dados": n < 30,
+        })
+
+    # Curva ABC: ordena por consumo; A = até 80% acumulado, B = até 95%, C = o resto
+    total_geral = sum(l["consumo"] for l in linhas) or 0.0
+    acum = 0.0
+    for l in sorted([x for x in linhas if x["consumo"] > 0], key=lambda x: -x["consumo"]):
+        l["pct"] = l["consumo"] / total_geral * 100
+        l["classe"] = "A" if acum < 80 else ("B" if acum < 95 else "C")
+        acum += l["pct"]
+        l["pct_acum"] = min(100.0, acum)
+    for l in linhas:
+        if "classe" not in l:
+            l.update(classe=None, pct=0.0, pct_acum=None)
+
+    for l in linhas:
+        ns = max(50.0, min(99.9, cfg["ns_" + (l["classe"] or "C")]))
+        z = NormalDist().inv_cdf(ns / 100)
+        L = l["prazo"]
+        ss = _ceil(z * l["desvio_dia"] * math.sqrt(L)) if L > 0 else 0.0
+        pp = _ceil(l["consumo_dia"] * L + ss) if L > 0 else 0.0
+        l.update(nivel_servico=ns, z=round(z, 3), seguranca=ss, ponto_pedido=pp)
+        l["cobertura_dias"] = round(l["saldo"] / l["consumo_dia"], 1) if l["consumo_dia"] > 0 else None
+        l["pedir"] = bool(L > 0 and l["consumo"] > 0 and l["saldo"] <= pp)
+        l["qtd_sugerida"] = (_ceil(max(0.0, l["estoque_maximo"] - l["saldo"]))
+                             if l["pedir"] and l["estoque_maximo"] > 0 else None)
+
+    resumo = {}
+    for c in ("A", "B", "C"):
+        grupo = [l for l in linhas if l["classe"] == c]
+        resumo[c] = {"itens": len(grupo),
+                     "pct_consumo": round(sum(l["consumo"] for l in grupo) / total_geral * 100, 1) if total_geral else 0.0,
+                     "nivel_servico": cfg["ns_" + c]}
+    resumo["sem_consumo"] = len([l for l in linhas if l["classe"] is None])
+    pedir_n = len([l for l in linhas if l["pedir"]])
+    ordem = {"A": 0, "B": 1, "C": 2, None: 3}
+    linhas.sort(key=lambda l: (ordem[l["classe"]], -l["consumo"], l["descricao"]))
+    return {"janela": W, "config": cfg, "resumo": resumo, "pedir": pedir_n, "sem_prazo": len([l for l in linhas if l["prazo"] == 0 and l["consumo"] > 0]),
+            "total_consumo": round(total_geral, 3), "itens": linhas}
+
+
+@app.route("/reposicao")
+def pag_reposicao():
+    return render_template("reposicao.html")
+
+
+@app.route("/api/reposicao")
+def api_reposicao():
+    db = get_db()
+    j = request.args.get("janela", type=int)
+    if j is not None and not (7 <= j <= 730):
+        return erro("Período inválido (use de 7 a 730 dias).")
+    return jsonify(analise_reposicao(db, j))
+
+
+@app.route("/api/config", methods=["PUT"])
+def api_config():
+    db = get_db()
+    data = request.get_json(silent=True) or {}
+    novos = {}
+    try:
+        if "janela" in data:
+            j = int(parse_num(data["janela"]))
+            if not 7 <= j <= 730:
+                return erro("O período de análise deve ficar entre 7 e 730 dias.")
+            novos["janela"] = j
+        for c in ("A", "B", "C"):
+            if "ns_" + c in data:
+                v = parse_num(data["ns_" + c])
+                if not 50 <= v <= 99.9:
+                    return erro("O nível de serviço deve ficar entre 50% e 99,9%.")
+                novos["ns_" + c] = v
+    except ValueError as e:
+        return erro(str(e))
+    for k, v in novos.items():
+        if db.execute("SELECT id FROM config WHERE chave = ?", (k,)).fetchone():
+            db.execute("UPDATE config SET valor = ? WHERE chave = ?", (str(v), k))
+        else:
+            db.execute("INSERT INTO config (chave, valor) VALUES (?, ?)", (k, str(v)))
+    if novos:
+        registrar(db, "EDITAR", "config", None, None, "Alterou os parâmetros de reposição: " +
+                  ", ".join(f"{k}={v:g}" for k, v in novos.items()))
+    db.commit()
+    return jsonify({"ok": True, "config": ler_config(db)})
+
+
+@app.route("/api/itens/<int:iid>/prazo", methods=["PUT"])
+def api_prazo_item(iid):
+    db = get_db()
+    it = item_completo(db, iid)
+    if not it:
+        return erro("Item não encontrado.", 404)
+    try:
+        p = parse_num((request.get_json(silent=True) or {}).get("prazo_entrega"))
+    except ValueError as e:
+        return erro(str(e))
+    if p < 0 or p > 365 or p != int(p):
+        return erro("O prazo de entrega deve ser um número inteiro de dias (0 a 365).")
+    db.execute("UPDATE itens SET prazo_entrega = ? WHERE id = ?", (int(p), iid))
+    registrar(db, "EDITAR", "item", iid, iid, f"Prazo de entrega de {nome_item(it)}: {int(p)} dia(s)")
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/reposicao.xlsx")
+def api_reposicao_xlsx():
+    from openpyxl import Workbook
+    db = get_db()
+    an = analise_reposicao(db, request.args.get("janela", type=int))
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Reposição"
+    ws.append(["Classe ABC", "Código", "Item", "Unidade", "Saldo", f"Consumo ({an['janela']} dias)", "% do consumo",
+               "% acumulado", "Consumo médio/dia", "Desvio/dia", "Prazo de entrega (dias)", "Nível de serviço (%)",
+               "Estoque de segurança", "Ponto de pedido", "Cobertura (dias)", "Situação", "Qtd. sugerida"])
+    for l in an["itens"]:
+        ws.append([l["classe"] or "Sem consumo", l["codigo"], l["descricao"], l["unidade"], l["saldo"], l["consumo"],
+                   round(l["pct"], 2), round(l["pct_acum"], 2) if l["pct_acum"] is not None else None,
+                   l["consumo_dia"], l["desvio_dia"], l["prazo"], l["nivel_servico"], l["seguranca"], l["ponto_pedido"],
+                   l["cobertura_dias"], "Pedir agora" if l["pedir"] else ("Defina o prazo" if l["prazo"] == 0 and l["consumo"] > 0 else "Ok"),
+                   l["qtd_sugerida"]])
+    _estilo_planilha(ws, [11, 14, 44, 9, 10, 16, 12, 12, 16, 12, 16, 16, 16, 14, 14, 16, 14])
+    registrar(db, "EXPORTAR", "planilha", None, None, "Exportou a análise de reposição para Excel")
+    db.commit()
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(buf, as_attachment=True, download_name=f"reposicao_{hoje()}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
 # ============================================================================
 # Excel: exportar / modelo / importar
 # ============================================================================
@@ -849,12 +1053,12 @@ def api_exportar():
     ws = wb.active
     ws.title = "Estoque"
     ws.append(["Código", "Descrição", "Categoria", "Unidade", "Localização", "Saldo", "Estoque mínimo",
-               "Estoque máximo", "Situação", "Ativo"])
+               "Estoque máximo", "Prazo de entrega (dias)", "Situação", "Ativo"])
     for r in db.execute(SQL_ITENS + " ORDER BY i.descricao").fetchall():
         i = completar_item(r)
         ws.append([i["codigo"], i["descricao"], i["categoria"], i["unidade"], i["localizacao"], i["saldo"],
-                   i["estoque_minimo"], i["estoque_maximo"], ROT_SIT[i["situacao"]], "Sim" if i["ativo"] else "Não"])
-    _estilo_planilha(ws, [14, 44, 18, 9, 16, 11, 14, 14, 18, 8])
+                   i["estoque_minimo"], i["estoque_maximo"], i["prazo_entrega"], ROT_SIT[i["situacao"]], "Sim" if i["ativo"] else "Não"])
+    _estilo_planilha(ws, [14, 44, 18, 9, 16, 11, 14, 14, 18, 18, 8])
     ws2 = wb.create_sheet("Movimentações")
     ws2.append(["Data", "Tipo", "Código", "Item", "Quantidade", "Unidade", "Documento",
                 "Origem/Destino", "Observações", "Usuário"])
@@ -874,12 +1078,13 @@ def api_exportar():
 
 
 COLUNAS_MODELO = ["Código", "Descrição", "Categoria", "Unidade", "Localização", "Estoque mínimo",
-                  "Estoque máximo", "Saldo inicial"]
+                  "Estoque máximo", "Prazo de entrega (dias)", "Saldo inicial"]
 ALIAS = {
     "codigo": "codigo", "cod": "codigo", "descricao": "descricao", "item": "descricao", "nome": "descricao",
     "categoria": "categoria", "grupo": "categoria", "unidade": "unidade", "und": "unidade", "un": "unidade",
     "localizacao": "localizacao", "local": "localizacao", "estoque minimo": "estoque_minimo", "minimo": "estoque_minimo",
     "estoque maximo": "estoque_maximo", "maximo": "estoque_maximo",
+    "prazo de entrega": "prazo_entrega", "prazo": "prazo_entrega", "lead time": "prazo_entrega",
     "saldo inicial": "saldo_inicial", "saldo": "saldo_inicial", "quantidade": "saldo_inicial", "qtde": "saldo_inicial",
 }
 
@@ -891,9 +1096,9 @@ def api_modelo_importacao():
     ws = wb.active
     ws.title = "Itens"
     ws.append(COLUNAS_MODELO)
-    ws.append(["PAP-A4", "Papel A4 75g (resma 500 fls)", "Material de expediente", "RESMA", "Prateleira A1", 20, 100, 45])
-    ws.append(["CAN-AZ", "Caneta esferográfica azul", "Material de expediente", "UN", "Prateleira A2", 50, 300, 120])
-    _estilo_planilha(ws, [14, 44, 24, 10, 16, 15, 15, 14])
+    ws.append(["PAP-A4", "Papel A4 75g (resma 500 fls)", "Material de expediente", "RESMA", "Prateleira A1", 20, 100, 7, 45])
+    ws.append(["CAN-AZ", "Caneta esferográfica azul", "Material de expediente", "UN", "Prateleira A2", 50, 300, 5, 120])
+    _estilo_planilha(ws, [14, 44, 24, 10, 16, 15, 15, 18, 14])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -958,16 +1163,16 @@ def api_importar():
                 return lin[i] if i is not None and i < len(lin) else None
             try:
                 d, msg = dados_item({k: col(k) for k in ("codigo", "descricao", "categoria", "unidade", "localizacao",
-                                                         "estoque_minimo", "estoque_maximo")})
+                                                         "estoque_minimo", "estoque_maximo", "prazo_entrega")})
                 if msg:
                     erros.append(f"Linha {n}: {msg}")
                     continue
                 chave = sem_acento(d["codigo"])
                 if chave in existentes:
                     db.execute("UPDATE itens SET descricao=?, categoria=?, unidade=?, localizacao=?, estoque_minimo=?,"
-                               " estoque_maximo=? WHERE id=?",
+                               " estoque_maximo=?, prazo_entrega=? WHERE id=?",
                                (d["descricao"], d["categoria"], d["unidade"], d["localizacao"],
-                                d["estoque_minimo"], d["estoque_maximo"], existentes[chave]))
+                                d["estoque_minimo"], d["estoque_maximo"], d["prazo_entrega"], existentes[chave]))
                     atualizados += 1
                 else:
                     saldo = parse_num(col("saldo_inicial"))
@@ -976,9 +1181,9 @@ def api_importar():
                         continue
                     cur = db.execute(
                         "INSERT INTO itens (codigo, descricao, categoria, unidade, localizacao, estoque_minimo,"
-                        " estoque_maximo, ativo, observacoes, criado_em) VALUES (?,?,?,?,?,?,?,1,?,?)",
+                        " estoque_maximo, prazo_entrega, ativo, observacoes, criado_em) VALUES (?,?,?,?,?,?,?,?,1,?,?)",
                         (d["codigo"], d["descricao"], d["categoria"], d["unidade"], d["localizacao"],
-                         d["estoque_minimo"], d["estoque_maximo"], "", agora()))
+                         d["estoque_minimo"], d["estoque_maximo"], d["prazo_entrega"], "", agora()))
                     iid = cur.lastrowid
                     existentes[chave] = iid
                     if saldo > EPS:

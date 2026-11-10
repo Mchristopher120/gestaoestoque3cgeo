@@ -1060,3 +1060,25 @@ td.acoes [data-mov="ENTRADA"] { color: var(--ok-text); }
 td.acoes [data-mov="SAIDA"] { color: var(--warn-text); }
 
 #fichaCorpo .table-wrap { max-height: 42vh; overflow-y: auto; }
+
+/* ---- Reposição / curva ABC ---- */
+.pareto-scroll { overflow-x: auto; }
+.pareto { width: 100%; min-width: 640px; height: auto; display: block; }
+.pareto-grid { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3 4; }
+.pareto-ref { stroke: var(--amber); stroke-width: 1.2; stroke-dasharray: 6 4; opacity: .7; }
+.pareto-lbl, .pareto-ax { fill: var(--text-muted, var(--muted)); font-size: 11px; }
+.input-prazo { width: 76px; padding: 6px 8px; text-align: center; min-height: 34px; }
+.kpi-unit { font-size: .5em; font-weight: 600; color: var(--muted); }
+.como-calcula { padding: 0; }
+.como-calcula summary { cursor: pointer; padding: 14px 18px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.como-calcula ul { margin: 0; padding: 0 22px 16px 38px; line-height: 1.55; color: var(--text); }
+.como-calcula li { margin-bottom: 6px; }
+a.kpi:hover { box-shadow: var(--shadow-md, 0 6px 18px rgba(15,31,77,.14)); }
+
+.banner-aviso[hidden] { display: none; }
+#tblRep { font-size: 13px; }
+#tblRep th, #tblRep td { padding-left: 8px; padding-right: 8px; }
+#tblRep td.text-left { min-width: 170px; }
+.input-prazo { width: 64px; }
+#tblRep th { white-space: normal; line-height: 1.25; font-size: 11px; letter-spacing: .02em; vertical-align: middle; }
+#tblRep td.text-left { min-width: 150px; }

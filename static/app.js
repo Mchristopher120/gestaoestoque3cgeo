@@ -49,6 +49,11 @@ function renderKPIs(s) {
             <div class="kpi-sub">${fmtNum(sit.zerado)} zerado${sit.zerado === 1 ? '' : 's'} · ${fmtNum(sit.baixo)} abaixo do mínimo</div>
             ${barraKpi(pctOk, 'var(--green)', 'Itens com estoque adequado')}
         </div>
+        <a class="kpi ${s.no_ponto_pedido ? 'amber' : 'green'}" href="/reposicao" style="text-decoration:none;color:inherit" title="Ver na tela Reposição">
+            <div class="kpi-label">No ponto de pedido</div>
+            <div class="kpi-value">${fmtNum(s.no_ponto_pedido)}</div>
+            <div class="kpi-sub">hora de pedir ao fornecedor</div>
+        </a>
         <div class="kpi green">
             <div class="kpi-label">Entradas no mês</div>
             <div class="kpi-value">${fmtNum(s.entradas_mes)}</div>
