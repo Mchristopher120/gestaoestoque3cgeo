@@ -11,7 +11,6 @@ async function carregarPainel({ aviso = false } = {}) {
         const [s, ult] = await Promise.all([fetchJSON('/api/stats'), fetchJSON('/api/movimentos?limite=8')]);
         erroBox.hidden = true;
         carregouPainel = true;
-        renderAtencao(s);
         renderKPIs(s);
         marcarAlertas(s.criticos_total);
         renderGraficos(s);
@@ -37,18 +36,20 @@ function barraKpi(valor, cor, rotulo) {
 function renderKPIs(s) {
     const sit = s.situacao;
     const pctOk = s.itens_ativos ? ((sit.ok + sit.excesso) / s.itens_ativos) * 100 : 0;
+    const ant = s.evolucao.length > 1 ? s.evolucao[s.evolucao.length - 2] : { entradas: 0, saidas: 0 };
+    const nome = (n) => n === 1 ? 'lançamento' : 'lançamentos';
     $('kpis').innerHTML = `
         <div class="kpi accent">
             <div class="kpi-label">Itens ativos</div>
             <div class="kpi-value">${fmtNum(s.itens_ativos)}</div>
             <div class="kpi-sub">${s.itens_arquivados ? `${fmtNum(s.itens_arquivados)} arquivado${s.itens_arquivados > 1 ? 's' : ''}` : 'cadastrados no estoque'}</div>
         </div>
-        <div class="kpi ${s.criticos_total ? 'red' : 'green'}">
+        <a class="kpi ${s.criticos_total ? 'red' : 'green'}" href="/estoque?situacao=repor" style="text-decoration:none;color:inherit" title="Ver os itens para repor">
             <div class="kpi-label">Para repor</div>
             <div class="kpi-value">${fmtNum(s.criticos_total)}</div>
             <div class="kpi-sub">${fmtNum(sit.zerado)} zerado${sit.zerado === 1 ? '' : 's'} · ${fmtNum(sit.baixo)} abaixo do mínimo</div>
             ${barraKpi(pctOk, 'var(--green)', 'Itens com estoque adequado')}
-        </div>
+        </a>
         <a class="kpi ${s.no_ponto_pedido ? 'amber' : 'green'}" href="/reposicao" style="text-decoration:none;color:inherit" title="Ver na tela Reposição">
             <div class="kpi-label">No ponto de pedido</div>
             <div class="kpi-value">${fmtNum(s.no_ponto_pedido)}</div>
@@ -57,34 +58,13 @@ function renderKPIs(s) {
         <div class="kpi green">
             <div class="kpi-label">Entradas no mês</div>
             <div class="kpi-value">${fmtNum(s.entradas_mes)}</div>
-            <div class="kpi-sub">lançamentos de recebimento</div>
+            <div class="kpi-sub">mês passado: ${fmtNum(ant.entradas)} ${nome(ant.entradas)}</div>
         </div>
         <div class="kpi amber">
             <div class="kpi-label">Saídas no mês</div>
             <div class="kpi-value">${fmtNum(s.saidas_mes)}</div>
-            <div class="kpi-sub">lançamentos de saída</div>
-        </div>
-        <div class="kpi slate">
-            <div class="kpi-label">Movimentações no mês</div>
-            <div class="kpi-value">${fmtNum(s.movimentos_mes)}</div>
-            <div class="kpi-sub">entradas, saídas e ajustes</div>
+            <div class="kpi-sub">mês passado: ${fmtNum(ant.saidas)} ${nome(ant.saidas)}</div>
         </div>`;
-}
-
-function renderAtencao(s) {
-    const el = $('atencao');
-    const itens = [];
-    if (s.situacao.zerado) itens.push({ icone: 'package-off', cls: 'critico', filtro: 'zerado',
-        texto: `<strong>${fmtNum(s.situacao.zerado)}</strong> item${s.situacao.zerado > 1 ? 's zerados' : ' zerado'}` });
-    if (s.situacao.baixo) itens.push({ icone: 'alert-triangle', cls: 'aviso', filtro: 'baixo',
-        texto: `<strong>${fmtNum(s.situacao.baixo)}</strong> abaixo do estoque mínimo` });
-    if (!itens.length) {
-        el.innerHTML = s.itens_ativos
-            ? `<div class="atencao-ok">${ico('circle-check')} Estoque em dia: nenhum item zerado ou abaixo do mínimo.</div>` : '';
-        return;
-    }
-    el.innerHTML = `<span class="atencao-titulo">${ico('bell')} Precisa de atenção</span>` + itens.map(i => `
-        <a class="atencao-item ${i.cls}" href="/estoque?situacao=${i.filtro}">${ico(i.icone)}<span>${i.texto}</span>${ico('arrow-left', 'ico ico-seta')}</a>`).join('');
 }
 
 function renderGraficos(s) {
@@ -115,12 +95,20 @@ function renderUltimas(lista) {
             <td>${badgeTipo(m.tipo)}</td>
             <td class="text-left"><a href="/estoque?id=${m.item_id}">${escapeHTML(m.descricao)}</a><span class="forn-sub">${escapeHTML(m.codigo)}</span></td>
             <td class="num nowrap">${qtdeSinal(m.qtde, m.unidade)}</td>
-            <td>${escapeHTML(m.documento) || '<span class="muted">—</span>'}</td>
-            <td>${escapeHTML(m.usuario)}</td>
+            <td class="hide-sm">${escapeHTML(m.documento) || '<span class="muted">—</span>'}</td>
+            <td class="hide-sm">${escapeHTML(m.usuario)}</td>
         </tr>`).join('')
         : `<tr><td colspan="6" class="empty"><span class="empty-icon">${ico('arrows-exchange', 'ico ico-empty')}</span>Nenhuma movimentação registrada ainda.</td></tr>`;
 }
 
+async function abrirMovPainel(tipo) {
+    try {
+        movConfigurar(await fetchJSON('/api/itens'), () => carregarPainel());
+        abrirMov(tipo);
+    } catch (err) { showToast(err.message, 'error'); }
+}
+$('btnEntrada').addEventListener('click', () => abrirMovPainel('ENTRADA'));
+$('btnSaida').addEventListener('click', () => abrirMovPainel('SAIDA'));
 $('btnRefresh').addEventListener('click', () => carregarPainel({ aviso: true }));
 $('btnTentar').addEventListener('click', () => carregarPainel());
 carregarPainel();

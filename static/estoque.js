@@ -180,7 +180,7 @@ ativarOrdenacao($('tblItens'), E.sort, render);
 
 (async () => {
     const p = new URLSearchParams(location.search);
-    if (p.get('situacao')) $('fSituacao').value = p.get('situacao') === 'zerado' || p.get('situacao') === 'baixo' ? p.get('situacao') : '';
+    if (p.get('situacao')) $('fSituacao').value = ['zerado', 'baixo', 'repor'].includes(p.get('situacao')) ? p.get('situacao') : '';
     await carregar();
     if (p.get('novo')) abrirItem();
     if (p.get('id')) abrirFicha(+p.get('id'));

@@ -1078,13 +1078,14 @@ def api_exportar():
 
 
 COLUNAS_MODELO = ["Código", "Descrição", "Categoria", "Unidade", "Localização", "Estoque mínimo",
-                  "Estoque máximo", "Prazo de entrega (dias)", "Saldo inicial"]
+                  "Estoque máximo", "Prazo de entrega (dias)", "Saldo inicial", "Data do saldo inicial (opcional)"]
 ALIAS = {
     "codigo": "codigo", "cod": "codigo", "descricao": "descricao", "item": "descricao", "nome": "descricao",
     "categoria": "categoria", "grupo": "categoria", "unidade": "unidade", "und": "unidade", "un": "unidade",
     "localizacao": "localizacao", "local": "localizacao", "estoque minimo": "estoque_minimo", "minimo": "estoque_minimo",
     "estoque maximo": "estoque_maximo", "maximo": "estoque_maximo",
     "prazo de entrega": "prazo_entrega", "prazo": "prazo_entrega", "lead time": "prazo_entrega",
+    "data do saldo inicial (opcional)": "data_saldo", "data do saldo inicial": "data_saldo", "data do saldo": "data_saldo", "data saldo": "data_saldo",
     "saldo inicial": "saldo_inicial", "saldo": "saldo_inicial", "quantidade": "saldo_inicial", "qtde": "saldo_inicial",
 }
 
@@ -1096,9 +1097,9 @@ def api_modelo_importacao():
     ws = wb.active
     ws.title = "Itens"
     ws.append(COLUNAS_MODELO)
-    ws.append(["PAP-A4", "Papel A4 75g (resma 500 fls)", "Material de expediente", "RESMA", "Prateleira A1", 20, 100, 7, 45])
-    ws.append(["CAN-AZ", "Caneta esferográfica azul", "Material de expediente", "UN", "Prateleira A2", 50, 300, 5, 120])
-    _estilo_planilha(ws, [14, 44, 24, 10, 16, 15, 15, 18, 14])
+    ws.append(["PAP-A4", "Papel A4 75g (resma 500 fls)", "Material de expediente", "RESMA", "Prateleira A1", 20, 100, 7, 45, ""])
+    ws.append(["CAN-AZ", "Caneta esferográfica azul", "Material de expediente", "UN", "Prateleira A2", 50, 300, 5, 120, ""])
+    _estilo_planilha(ws, [14, 44, 24, 10, 16, 15, 15, 18, 14, 20])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -1179,6 +1180,13 @@ def api_importar():
                     if saldo < 0:
                         erros.append(f"Linha {n}: o saldo não pode ser negativo.")
                         continue
+                    bruto = col("data_saldo")
+                    if hasattr(bruto, "strftime"):
+                        bruto = bruto.strftime("%Y-%m-%d")
+                    dt_saldo = parse_data(str(bruto) if bruto is not None else "")
+                    if dt_saldo > hoje():
+                        erros.append(f"Linha {n}: a data do saldo inicial não pode estar no futuro.")
+                        continue
                     cur = db.execute(
                         "INSERT INTO itens (codigo, descricao, categoria, unidade, localizacao, estoque_minimo,"
                         " estoque_maximo, prazo_entrega, ativo, observacoes, criado_em) VALUES (?,?,?,?,?,?,?,?,1,?,?)",
@@ -1187,7 +1195,7 @@ def api_importar():
                     iid = cur.lastrowid
                     existentes[chave] = iid
                     if saldo > EPS:
-                        inserir_movimento(db, iid, "ENTRADA", saldo, hoje(), "Importação", "", "Saldo inicial importado")
+                        inserir_movimento(db, iid, "ENTRADA", saldo, dt_saldo, "Importação", "", "Saldo inicial importado")
                         recalcular_item(db, iid)
                     criados += 1
             except ValueError as e:
@@ -1200,6 +1208,133 @@ def api_importar():
         db.rollback()
         raise
     return jsonify({"ok": True, "criados": criados, "atualizados": atualizados, "erros": erros[:50], "total_erros": len(erros)})
+
+
+# ============================================================================
+# Saídas em lote (planilha)
+# ============================================================================
+COLUNAS_SAIDAS = ["Código", "Quantidade", "Data", "Documento", "Destino / requisitante", "Observações"]
+ALIAS_SAIDAS = {
+    "codigo": "codigo", "cod": "codigo", "item": "codigo",
+    "quantidade": "qtde", "qtde": "qtde", "qtd": "qtde", "quant": "qtde",
+    "data": "data", "data da saida": "data",
+    "documento": "documento", "doc": "documento", "requisicao": "documento",
+    "destino / requisitante": "contraparte", "destino": "contraparte", "requisitante": "contraparte",
+    "setor": "contraparte", "contraparte": "contraparte",
+    "observacoes": "obs", "observacao": "obs", "obs": "obs",
+}
+
+
+@app.route("/api/importar/saidas/modelo.xlsx")
+def api_modelo_saidas():
+    from openpyxl import Workbook
+    db = get_db()
+    itens = db.execute("SELECT id, codigo, descricao, unidade FROM itens WHERE ativo = 1 ORDER BY codigo").fetchall()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Saídas"
+    ws.append(COLUNAS_SAIDAS)
+    exemplo = [(i["codigo"]) for i in itens[:2]] or ["PAP-A4", "CAN-AZ"]
+    ws.append([exemplo[0], 5, hoje(), "Req 001/2026", "Seção de Pessoal", "Exemplo — apague esta linha"])
+    ws.append([exemplo[-1], 20, hoje(), "Req 002/2026", "Almoxarifado", ""])
+    _estilo_planilha(ws, [16, 12, 14, 18, 28, 36])
+    ref = wb.create_sheet("Itens cadastrados")
+    ref.append(["Código", "Descrição", "Unidade", "Saldo atual"])
+    for i in itens:
+        ref.append([i["codigo"], i["descricao"], i["unidade"], item_completo(db, i["id"])["saldo"]])
+    _estilo_planilha(ref, [16, 46, 10, 14])
+    ajuda = wb.create_sheet("Como preencher")
+    ajuda.append(["Instruções"])
+    for t in ("Preencha a aba “Saídas”: uma linha por saída. Só Código e Quantidade são obrigatórios.",
+              "O Código precisa existir no estoque (veja a aba “Itens cadastrados”).",
+              "Data: dd/mm/aaaa. Em branco = hoje. Não pode ser futura.",
+              "As saídas são lançadas na ordem das linhas. Se o saldo não bastar, a linha é ignorada e o motivo aparece no resultado.",
+              "Apague as linhas de exemplo antes de enviar."):
+        ajuda.append([t])
+    _estilo_planilha(ajuda, [110])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(buf, as_attachment=True, download_name="modelo_saidas_estoque.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.route("/api/importar/saidas", methods=["POST"])
+def api_importar_saidas():
+    arq = request.files.get("arquivo")
+    if not arq or not arq.filename:
+        return erro("Escolha um arquivo .xlsx ou .csv.")
+    try:
+        linhas = _ler_planilha(arq)
+    except ValueError as e:
+        return erro(str(e))
+    except Exception:
+        return erro("Não consegui ler o arquivo. Use o modelo de saídas para montar a planilha.")
+    linhas = [l for l in linhas if l and any(c not in (None, "") for c in l)]
+    if len(linhas) < 2:
+        return erro("A planilha está vazia (precisa do cabeçalho e de ao menos uma saída).")
+    mapa = {}
+    for idx, cab in enumerate(linhas[0]):
+        k = ALIAS_SAIDAS.get(sem_acento(cab))
+        if k and k not in mapa:
+            mapa[k] = idx
+    if "codigo" not in mapa or "qtde" not in mapa:
+        return erro("Faltam as colunas “Código” e “Quantidade”. Baixe o modelo de saídas para ver o formato.")
+    if len(linhas) > 2001:
+        return erro("Máximo de 2.000 saídas por importação.")
+
+    db = get_db()
+    por_codigo = {sem_acento(r["codigo"]): r["id"] for r in db.execute("SELECT id, codigo FROM itens").fetchall()}
+    lancadas = 0
+    erros = []
+    try:
+        for n, lin in enumerate(linhas[1:], start=2):
+            def col(k):
+                i = mapa.get(k)
+                return lin[i] if i is not None and i < len(lin) else None
+            try:
+                cod = txt(col("codigo"), 60)
+                iid = por_codigo.get(sem_acento(cod))
+                if not iid:
+                    erros.append(f"Linha {n}: código “{cod}” não encontrado.")
+                    continue
+                it = item_completo(db, iid)
+                if not it["ativo"]:
+                    erros.append(f"Linha {n}: {cod} está arquivado.")
+                    continue
+                q = parse_num(col("qtde"))
+                if q <= 0:
+                    erros.append(f"Linha {n}: a quantidade deve ser maior que zero.")
+                    continue
+                bruto = col("data")
+                if hasattr(bruto, "strftime"):
+                    bruto = bruto.strftime("%Y-%m-%d")
+                dt = parse_data(str(bruto) if bruto is not None else "")
+                if dt > hoje():
+                    erros.append(f"Linha {n}: a data não pode estar no futuro.")
+                    continue
+                doc, contra, obs = txt(col("documento"), 60), txt(col("contraparte"), 100), txt(col("obs"), 300)
+                mid = inserir_movimento(db, iid, "SAIDA", -q, dt, doc, contra, obs)
+                try:
+                    recalcular_item(db, iid)
+                except SaldoNegativo:
+                    db.execute("DELETE FROM movimentos WHERE id = ?", (mid,))
+                    erros.append(f"Linha {n}: saldo insuficiente de {cod} para sair {fmt_qtd(q)} {it['unidade']}.")
+                    continue
+                registrar(db, "SAIDA", "movimento", mid, iid,
+                          f"Saída de −{fmt_qtd(q)} {it['unidade']} — {nome_item(it)}"
+                          + (f" · {doc}" if doc else "") + (f" · {contra}" if contra else "") + " (planilha)")
+                lancadas += 1
+            except ValueError as e:
+                erros.append(f"Linha {n}: {e}")
+        if lancadas:
+            registrar(db, "IMPORTAR", "planilha", None, None,
+                      f"Importou saídas da planilha “{arq.filename}”: {lancadas} lançada(s), {len(erros)} ignorada(s)")
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return jsonify({"ok": True, "lancadas": lancadas, "erros": erros[:50], "total_erros": len(erros)})
 
 
 # O banco é criado/migrado ao iniciar (também no Vercel, a cada cold start).

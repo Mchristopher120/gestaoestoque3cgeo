@@ -26,10 +26,39 @@
                 <li>Baixe o modelo e preencha uma linha por item. Só <strong>Código</strong> e <strong>Descrição</strong> são obrigatórios.</li>
                 <li>Se o código já existir, os dados do cadastro são <strong>atualizados</strong> (o saldo não muda).</li>
                 <li>A coluna <strong>Prazo de entrega (dias)</strong> alimenta o ponto de pedido e o estoque de segurança.</li>
-                <li>Itens novos entram com o <strong>Saldo inicial</strong> informado.</li>
+                <li>Itens novos entram com o <strong>Saldo inicial</strong> informado, na data de hoje (ou na <strong>Data do saldo inicial</strong>, se preenchida — use uma data antiga se for lançar saídas com data anterior).</li>
             </ol>
         </section>
         <div id="resultado"></div>
+
+        <div class="page-head" style="margin-top:28px">
+            <div>
+                <h2 class="page-title">Lançar saídas em lote</h2>
+                <p class="page-sub">Registre várias saídas de material de uma vez (Excel ou CSV)</p>
+            </div>
+            <a href="/api/importar/saidas/modelo.xlsx" class="btn btn-secondary btn-sm">{{ ico('download') }} Baixar modelo de saídas</a>
+        </div>
+
+        <section class="card">
+            <form id="formSai" class="import-form">
+                <label class="dropzone" id="dropzoneSai" tabindex="0">
+                    <input type="file" id="arquivoSai" accept=".xlsx,.xlsm,.csv">
+                    <span class="dropzone-ico">{{ ico('file-spreadsheet') }}</span>
+                    <span class="dropzone-txt">
+                        <strong id="nomeArquivoSai">Escolha ou arraste a planilha de saídas aqui</strong>
+                        <span class="muted small">.xlsx ou .csv · até 2.000 saídas</span>
+                    </span>
+                </label>
+                <button class="btn btn-primary" type="submit" id="btnEnviarSai" disabled>{{ ico('file-upload') }} Lançar saídas</button>
+            </form>
+            <ol class="import-passos">
+                <li>Baixe o modelo: ele já traz a lista dos itens cadastrados e o saldo atual.</li>
+                <li>Preencha uma linha por saída. Só <strong>Código</strong> e <strong>Quantidade</strong> são obrigatórios; sem data, vale hoje.</li>
+                <li>As saídas entram na ordem das linhas. Se o saldo não bastar, <strong>a linha é ignorada</strong> e o motivo aparece no resultado.</li>
+                <li>Cada saída pode ser estornada depois em <a href="/movimentacoes">Movimentações</a>.</li>
+            </ol>
+        </section>
+        <div id="resultadoSai"></div>
 {% endblock %}
 {% block scripts %}
     <script src="{{ url_for('static', filename='importar.js') }}"></script>

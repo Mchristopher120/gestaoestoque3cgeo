@@ -1082,3 +1082,13 @@ a.kpi:hover { box-shadow: var(--shadow-md, 0 6px 18px rgba(15,31,77,.14)); }
 .input-prazo { width: 64px; }
 #tblRep th { white-space: normal; line-height: 1.25; font-size: 11px; letter-spacing: .02em; vertical-align: middle; }
 #tblRep td.text-left { min-width: 150px; }
+
+/* Painel: telas pequenas */
+@media (max-width: 640px) {
+    .hide-sm { display: none; }
+    .evo-col:nth-child(even) .evo-mes { visibility: hidden; }  /* rótulos de mês alternados: não se sobrepõem */
+    .kpi { min-height: 0; padding: 14px; }
+    .page-head .detail-actions { width: 100%; }
+    .page-head .detail-actions .btn-primary, .page-head .detail-actions .btn-secondary { flex: 1; justify-content: center; }
+}
+a.kpi:focus-visible, .btn:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
