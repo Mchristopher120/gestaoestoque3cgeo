@@ -19,3 +19,13 @@ Sistema de estoque com a mesma identidade visual do sistema de empenhos (Flask +
    - `APP_PASSWORD` — senha do setor
    - `SECRET_KEY` — texto aleatório longo (opcional, recomendado)
 3. Deploy. As tabelas são criadas sozinhas no primeiro acesso.
+
+## Atalho para o sistema de Empenhos (entrada direta)
+Na barra de cima aparece **Empenhos**, que abre o outro sistema do setor já com o seu nome, sem digitar a senha de novo.
+
+| Variável (Vercel) | Para quê |
+|---|---|
+| `EMPENHOS_URL` | Endereço do sistema de Empenhos (ex.: `https://setordeaprovisionamento.vercel.app`). Sem ela, o atalho não aparece. |
+| `SSO_SECRET` | Chave secreta **igual nos dois sistemas** (no mínimo 16 caracteres, de preferência 40 ou mais, aleatória). Sem ela, o atalho só abre o outro sistema e ele pede a senha. |
+
+O passe de entrada é assinado com essa chave, vale 60 segundos e só pode ser usado uma vez. Trocar a `SSO_SECRET` num sistema sem trocar no outro só desliga a entrada direta.

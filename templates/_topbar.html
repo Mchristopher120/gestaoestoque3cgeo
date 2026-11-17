@@ -18,6 +18,7 @@
         <a href="/reposicao" class="nav-link {{ 'active' if pagina == 'reposicao' }}" {% if pagina == 'reposicao' %}aria-current="page"{% endif %}>{{ ico('chart-bar') }}Reposição</a>
         <a href="/movimentacoes" class="nav-link {{ 'active' if pagina == 'movimentacoes' }}" {% if pagina == 'movimentacoes' %}aria-current="page"{% endif %}>{{ ico('arrows-exchange') }}Movimentações</a>
         <a href="/historico" class="nav-link {{ 'active' if pagina == 'historico' }}" {% if pagina == 'historico' %}aria-current="page"{% endif %}>{{ ico('history') }}Histórico</a>
+        {% if outro_sistema %}<a href="/ir/empenhos" class="nav-link nav-sistema" title="Abrir o sistema de Empenhos (sem digitar a senha de novo)">{{ ico('receipt') }}<span class="nav-sistema-txt">Empenhos</span>{{ ico('external-link', 'ico ico-sai') }}</a>{% endif %}
     </nav>
 
     <div class="user-menu">

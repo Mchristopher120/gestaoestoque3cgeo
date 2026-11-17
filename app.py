@@ -17,8 +17,10 @@ import unicodedata
 from datetime import date, datetime, timedelta
 from statistics import NormalDist
 
-from flask import (Flask, g, jsonify, redirect, render_template, request,
+from flask import (Flask, g, jsonify, make_response, redirect, render_template, request,
                    send_file, session, url_for)
+
+import sso
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "estoque.db")
@@ -279,7 +281,7 @@ def usuario_atual():
     return session.get("nome") or ("local" if not auth_ativa() else "?")
 
 
-ROTAS_LIVRES = {"login", "logout", "static", "favicon"}
+ROTAS_LIVRES = {"login", "logout", "static", "favicon", "entrar_por_passe"}
 
 
 @app.before_request
@@ -308,7 +310,7 @@ def iniciais(nome):
 
 @app.context_processor
 def contexto_templates():
-    return {"usuario": session.get("nome"), "auth_ativa": auth_ativa(), "iniciais": iniciais(session.get("nome"))}
+    return {"usuario": session.get("nome"), "auth_ativa": auth_ativa(), "iniciais": iniciais(session.get("nome")), "outro_sistema": "Empenhos" if url_empenhos() else None}
 
 
 def _ip():
@@ -322,6 +324,8 @@ def login():
             return render_template("login.html", sem_senha=True), 503
         return redirect("/")
     erro_msg, nome = None, ""
+    if request.args.get("aviso") == "passe":
+        erro_msg = "O acesso direto expirou ou não foi aceito. Entre com a senha."
     if request.method == "POST":
         db = get_db()
         nome = (request.form.get("nome") or "").strip()[:60]
@@ -357,6 +361,47 @@ def login():
 def favicon():
     return send_file(os.path.join(BASE_DIR, "static", "img", "favicon.ico"),
                      mimetype="image/vnd.microsoft.icon", max_age=86400)
+
+
+# ============================================================================
+# ATALHO PARA O SISTEMA DE EMPENHOS (entrada direta, sem digitar a senha de novo)
+# Variáveis: EMPENHOS_URL (endereço do outro sistema) e SSO_SECRET (a mesma nos dois). Ver sso.py.
+# ============================================================================
+def url_empenhos():
+    url = (os.environ.get("EMPENHOS_URL") or "").strip().rstrip("/")
+    if url and not re.match(r"^https?://", url):
+        url = "https://" + url
+    return url
+
+
+@app.route("/ir/empenhos")
+def ir_empenhos():
+    url = url_empenhos()
+    if not url:
+        return redirect("/")
+    passe = sso.gerar_passe(session.get("nome"), "empenhos") if auth_ativa() and session.get("ok") else None
+    if not passe:  # sem SSO_SECRET: só abre o outro sistema, que pede a senha
+        return redirect(url + "/")
+    resp = make_response(render_template("passagem.html", sistema="Empenhos", acao=url + "/entrar", passe=passe))
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.route("/entrar", methods=["POST"])
+def entrar_por_passe():
+    if not auth_ativa():
+        return redirect("/")
+    nome = sso.validar_passe(request.form.get("passe") or "", "estoque")
+    if not nome:
+        return redirect(url_for("login", aviso="passe"))
+    session.clear()
+    session.permanent = True
+    session["ok"] = True
+    session["nome"] = nome
+    db = get_db()
+    registrar(db, "LOGIN", "sessao", None, None, f"{nome} entrou vindo do sistema de Empenhos")
+    db.commit()
+    return redirect("/")
 
 
 @app.route("/logout")
