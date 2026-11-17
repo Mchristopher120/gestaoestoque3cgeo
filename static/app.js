@@ -21,7 +21,7 @@ async function carregarPainel({ aviso = false } = {}) {
         erroBox.hidden = false;
         if (!carregouPainel) {
             $('kpis').innerHTML = '';
-            $('tbodyUltimas').innerHTML = `<tr><td colspan="6" class="empty">Dados indisponíveis no momento.</td></tr>`;
+            $('tbodyUltimas').innerHTML = `<tr><td colspan="5" class="empty">Dados indisponíveis no momento.</td></tr>`;
             ['chartSituacao', 'listaCriticos', 'chartCategorias', 'chartEvolucao', 'chartTopSaldo', 'chartTopSaidas']
                 .forEach(id => $(id).innerHTML = graficoVazio('Dados indisponíveis.'));
         }
@@ -53,7 +53,7 @@ function renderKPIs(s) {
         <a class="kpi ${s.no_ponto_pedido ? 'amber' : 'green'}" href="/reposicao" style="text-decoration:none;color:inherit" title="Ver na tela Reposição">
             <div class="kpi-label">No ponto de pedido</div>
             <div class="kpi-value">${fmtNum(s.no_ponto_pedido)}</div>
-            <div class="kpi-sub">hora de pedir ao fornecedor</div>
+            <div class="kpi-sub">hora de fazer o pedido</div>
         </a>
         <div class="kpi green">
             <div class="kpi-label">Entradas no mês</div>
@@ -95,10 +95,9 @@ function renderUltimas(lista) {
             <td>${badgeTipo(m.tipo)}</td>
             <td class="text-left"><a href="/estoque?id=${m.item_id}">${escapeHTML(m.descricao)}</a><span class="forn-sub">${escapeHTML(m.codigo)}</span></td>
             <td class="num nowrap">${qtdeSinal(m.qtde, m.unidade)}</td>
-            <td class="hide-sm">${escapeHTML(m.documento) || '<span class="muted">—</span>'}</td>
             <td class="hide-sm">${escapeHTML(m.usuario)}</td>
         </tr>`).join('')
-        : `<tr><td colspan="6" class="empty"><span class="empty-icon">${ico('arrows-exchange', 'ico ico-empty')}</span>Nenhuma movimentação registrada ainda.</td></tr>`;
+        : `<tr><td colspan="5" class="empty"><span class="empty-icon">${ico('arrows-exchange', 'ico ico-empty')}</span>Nenhuma movimentação registrada ainda.</td></tr>`;
 }
 
 async function abrirMovPainel(tipo) {

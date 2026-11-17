@@ -74,3 +74,30 @@ $('formSai').addEventListener('submit', async ev => {
         $('resultadoSai').innerHTML = `<div class="import-msg erro">${ico('alert-triangle')}<div><strong>Erro</strong>${escapeHTML(err.message)}</div></div>`;
     } finally { btn.disabled = !inpSai.files[0]; }
 });
+
+
+// Zerar o sistema
+$('btnZerar').addEventListener('click', async () => {
+    $('zerarTexto').value = ''; $('zerarConfirmar').disabled = true; $('zerarErro').hidden = true;
+    try {
+        const itens = await fetchJSON('/api/itens');
+        $('zerarResumo').textContent = `${fmtNum(itens.length)} item(ns) e todas as movimentações`;
+    } catch { /* mantém o texto genérico */ }
+    abrirModal('modalZerar');
+    setTimeout(() => $('zerarTexto').focus(), 60);
+});
+$('zerarTexto').addEventListener('input', () => { $('zerarConfirmar').disabled = $('zerarTexto').value.trim().toUpperCase() !== 'ZERAR'; });
+$('zerarCancelar').addEventListener('click', () => fecharModal('modalZerar'));
+$('formZerar').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const btn = $('zerarConfirmar');
+    btn.disabled = true;
+    try {
+        const r = await enviarJSON('/api/zerar', 'POST', { confirmacao: $('zerarTexto').value });
+        if (!r.ok) { $('zerarErro').firstElementChild.textContent = r.error; $('zerarErro').hidden = false; return; }
+        fecharModal('modalZerar');
+        showToast(`Sistema zerado: ${fmtNum(r.itens)} item(ns) e ${fmtNum(r.movimentos)} movimentação(ões) apagados.`, 'success');
+        atualizarAlertas();
+    } catch (err) { $('zerarErro').firstElementChild.textContent = err.message; $('zerarErro').hidden = false; }
+    finally { btn.disabled = $('zerarTexto').value.trim().toUpperCase() !== 'ZERAR'; }
+});

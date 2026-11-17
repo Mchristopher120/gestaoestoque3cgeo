@@ -9,13 +9,14 @@
             </div>
             <div class="detail-actions">
                 <a href="/importar" class="btn btn-secondary btn-sm">{{ ico('file-upload') }} Importar</a>
+                <button class="btn btn-secondary btn-sm" id="btnLote">{{ ico('arrow-up') }} Baixa em lote</button>
                 <button class="btn btn-primary btn-sm" id="btnNovo">{{ ico('plus') }} Novo item</button>
             </div>
         </div>
 
         <section class="card">
             <div class="toolbar">
-                <input type="search" id="fBusca" class="input" placeholder="Buscar por código, descrição ou local…" aria-label="Buscar item">
+                <input type="search" id="fBusca" class="input" placeholder="Buscar por código, descrição ou categoria…" aria-label="Buscar item">
                 <select id="fSituacao" class="input" aria-label="Situação">
                     <option value="">Todas as situações</option>
                     <option value="repor">Precisam de reposição</option>
@@ -27,11 +28,22 @@
                 <select id="fCategoria" class="input" aria-label="Categoria"><option value="">Todas as categorias</option></select>
                 <label class="check"><input type="checkbox" id="fArquivados"> Mostrar arquivados</label>
                 <span class="count-badge" id="countBadge">0 itens</span>
+                <div class="seg seg-visao" id="visao" role="radiogroup" aria-label="Modo de exibição">
+                    <label><input type="radio" name="visao" value="lista" checked>Lista</label>
+                    <label><input type="radio" name="visao" value="cards">Cards</label>
+                </div>
             </div>
-            <div class="table-wrap">
+            <div class="selecao-barra" id="selBarra" hidden>
+                <span><strong id="selQtd">0</strong> selecionado(s)</span>
+                <button class="btn btn-primary btn-sm" id="btnBaixaSel">{{ ico('arrow-up') }} Dar baixa nos selecionados</button>
+                <button class="btn btn-ghost btn-sm" id="btnLimparSel">Limpar seleção</button>
+            </div>
+            <div id="gridCards" class="cards-grid" hidden></div>
+            <div class="table-wrap" id="wrapLista">
                 <table id="tblItens">
                     <thead>
                         <tr>
+                            <th class="col-sel"><input type="checkbox" id="selTodos" aria-label="Selecionar todos os itens listados"></th>
                             <th data-key="codigo">Código</th>
                             <th data-key="descricao" class="text-left">Descrição</th>
                             <th data-key="categoria">Categoria</th>
@@ -57,17 +69,12 @@
                     </div>
                     <label for="iDescricao">Descrição</label>
                     <input id="iDescricao" class="input" maxlength="200" required>
-                    <div class="grid-2">
-                        <div><label for="iCategoria">Categoria</label><input id="iCategoria" class="input" maxlength="60" list="listaCats"><datalist id="listaCats"></datalist></div>
-                        <div><label for="iLocal">Localização</label><input id="iLocal" class="input" maxlength="60" placeholder="ex.: Prateleira A1"></div>
-                    </div>
+                    <label for="iCategoria">Categoria</label>
+                    <input id="iCategoria" class="input" maxlength="60" list="listaCats"><datalist id="listaCats"></datalist>
                     <div class="grid-2">
                         <div><label for="iMin">Estoque mínimo</label><input id="iMin" class="input" inputmode="decimal" placeholder="0"></div>
                         <div><label for="iMax">Estoque máximo</label><input id="iMax" class="input" inputmode="decimal" placeholder="0"></div>
                     </div>
-                    <label for="iPrazo">Prazo de entrega do fornecedor (dias)</label>
-                    <input id="iPrazo" class="input" inputmode="numeric" placeholder="0">
-                    <p class="campo-ajuda">Usado no ponto de pedido e no estoque de segurança (tela Reposição).</p>
                     <div id="grupoInicial">
                         <label for="iSaldo">Saldo inicial</label>
                         <input id="iSaldo" class="input" inputmode="decimal" placeholder="0">
@@ -89,6 +96,34 @@
             <div class="modal-box modal-large">
                 <div id="fichaCorpo"></div>
                 <div class="modal-actions"><button type="button" class="btn btn-ghost" id="fichaFechar">Fechar</button></div>
+            </div>
+        </div>
+
+        <!-- Baixa de vários materiais de uma vez -->
+        <div class="modal" id="modalLote" role="dialog" aria-modal="true" aria-labelledby="loteTitulo">
+            <div class="modal-box modal-large">
+                <h3 id="loteTitulo">Baixa em lote</h3>
+                <form class="modal-body" id="formLote" autocomplete="off" novalidate>
+                    <div class="grid-2">
+                        <div><label for="loteData">Data</label><input id="loteData" class="input" type="date"></div>
+                        <div><label for="loteObs">Observações (vale para todos)</label><input id="loteObs" class="input" maxlength="300"></div>
+                    </div>
+                    <div class="lote-add">
+                        <select id="loteAdd" class="input" aria-label="Adicionar material"></select>
+                        <button type="button" class="btn btn-secondary btn-sm" id="loteAddBtn">{{ ico('plus') }} Adicionar</button>
+                    </div>
+                    <div class="table-wrap">
+                        <table class="tbl-lote">
+                            <thead><tr><th class="text-left">Material</th><th>Saldo</th><th>Quantidade a baixar</th><th></th></tr></thead>
+                            <tbody id="loteLinhas"></tbody>
+                        </table>
+                    </div>
+                    <div class="alert-error" id="loteErro" role="alert" hidden><div></div></div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-ghost" id="loteCancelar">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" id="loteSalvar">Dar baixa</button>
+                    </div>
+                </form>
             </div>
         </div>
 

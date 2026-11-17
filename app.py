@@ -144,10 +144,8 @@ SCHEMA = [
         descricao TEXT NOT NULL,
         categoria TEXT,
         unidade TEXT,
-        localizacao TEXT,
         estoque_minimo {REAL} DEFAULT 0,
         estoque_maximo {REAL} DEFAULT 0,
-        prazo_entrega INTEGER DEFAULT 0,
         ativo INTEGER DEFAULT 1,
         observacoes TEXT,
         criado_em TEXT)""",
@@ -159,8 +157,6 @@ SCHEMA = [
         tipo TEXT NOT NULL,
         qtde {REAL} NOT NULL,
         data TEXT NOT NULL,
-        documento TEXT,
-        contraparte TEXT,
         observacoes TEXT,
         usuario TEXT,
         criado_em TEXT)""",
@@ -182,13 +178,6 @@ def init_db():
     try:
         for s in SCHEMA:
             con.execute(s)
-        # Bancos criados em versões anteriores: acrescenta a coluna do prazo de entrega.
-        if USE_POSTGRES:
-            con.execute("ALTER TABLE itens ADD COLUMN IF NOT EXISTS prazo_entrega INTEGER DEFAULT 0")
-        else:
-            cols = [r[1] for r in con.execute("PRAGMA table_info(itens)").fetchall()]
-            if "prazo_entrega" not in cols:
-                con.execute("ALTER TABLE itens ADD COLUMN prazo_entrega INTEGER DEFAULT 0")
         con.commit()
     finally:
         con.close()
@@ -440,7 +429,6 @@ def completar_item(r):
     minimo, maximo = float(d["estoque_minimo"] or 0), float(d["estoque_maximo"] or 0)
     d["saldo"] = round(saldo, 6)
     d["estoque_minimo"], d["estoque_maximo"] = minimo, maximo
-    d["prazo_entrega"] = int(d.get("prazo_entrega") or 0)
     d["situacao"] = situacao(saldo, minimo, maximo)
     d["ativo"] = bool(d["ativo"])
     # sugestão de reposição: o que falta para chegar ao máximo (ou ao dobro do mínimo)
@@ -467,19 +455,16 @@ def dados_item(data):
         return None, "Informe a descrição do item."
     try:
         minimo, maximo = parse_num(data.get("estoque_minimo")), parse_num(data.get("estoque_maximo"))
-        prazo = parse_num(data.get("prazo_entrega"))
     except ValueError as e:
         return None, str(e)
     if minimo < 0 or maximo < 0:
         return None, "Estoque mínimo e máximo não podem ser negativos."
-    if prazo < 0 or prazo > 365 or prazo != int(prazo):
-        return None, "O prazo de entrega deve ser um número inteiro de dias (0 a 365)."
     if maximo and minimo and maximo < minimo:
         return None, "O estoque máximo não pode ser menor que o mínimo."
     return {
         "codigo": codigo, "descricao": descricao,
         "categoria": txt(data.get("categoria"), 60), "unidade": txt(data.get("unidade"), 12).upper() or "UN",
-        "localizacao": txt(data.get("localizacao"), 60), "estoque_minimo": minimo, "estoque_maximo": maximo, "prazo_entrega": int(prazo),
+        "estoque_minimo": minimo, "estoque_maximo": maximo,
         "observacoes": txt(data.get("observacoes"), 500),
     }, None
 
@@ -491,11 +476,11 @@ def codigo_existe(db, codigo, ignorar_id=None):
     return None
 
 
-def inserir_movimento(db, item_id, tipo, qtde_assinada, data, documento, contraparte, obs):
+def inserir_movimento(db, item_id, tipo, qtde_assinada, data, obs):
     cur = db.execute(
-        "INSERT INTO movimentos (item_id, tipo, qtde, data, documento, contraparte,"
-        " observacoes, usuario, criado_em) VALUES (?,?,?,?,?,?,?,?,?)",
-        (item_id, tipo, qtde_assinada, data, documento, contraparte, obs, usuario_atual(), agora()))
+        "INSERT INTO movimentos (item_id, tipo, qtde, data, observacoes, usuario, criado_em)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (item_id, tipo, qtde_assinada, data, obs, usuario_atual(), agora()))
     return cur.lastrowid
 
 
@@ -554,13 +539,13 @@ def api_criar_item():
         return erro("O saldo inicial não pode ser negativo.")
     try:
         cur = db.execute(
-            "INSERT INTO itens (codigo, descricao, categoria, unidade, localizacao, estoque_minimo,"
-            " estoque_maximo, prazo_entrega, ativo, observacoes, criado_em) VALUES (?,?,?,?,?,?,?,?,1,?,?)",
-            (d["codigo"], d["descricao"], d["categoria"], d["unidade"], d["localizacao"],
-             d["estoque_minimo"], d["estoque_maximo"], d["prazo_entrega"], d["observacoes"], agora()))
+            "INSERT INTO itens (codigo, descricao, categoria, unidade, estoque_minimo,"
+            " estoque_maximo, ativo, observacoes, criado_em) VALUES (?,?,?,?,?,?,1,?,?)",
+            (d["codigo"], d["descricao"], d["categoria"], d["unidade"],
+             d["estoque_minimo"], d["estoque_maximo"], d["observacoes"], agora()))
         iid = cur.lastrowid
         if saldo_ini > EPS:
-            inserir_movimento(db, iid, "ENTRADA", saldo_ini, dt, "Saldo inicial", "", "")
+            inserir_movimento(db, iid, "ENTRADA", saldo_ini, dt, "Saldo inicial")
             recalcular_item(db, iid)
         registrar(db, "CRIAR", "item", iid, iid,
                   f"Cadastrou o item {d['codigo']} — {d['descricao']}"
@@ -600,10 +585,10 @@ def api_editar_item(iid):
     if codigo_existe(db, d["codigo"], ignorar_id=iid):
         return erro(f"Já existe outro item com o código {d['codigo']}.", 409)
     db.execute(
-        "UPDATE itens SET codigo=?, descricao=?, categoria=?, unidade=?, localizacao=?, estoque_minimo=?,"
-        " estoque_maximo=?, prazo_entrega=?, observacoes=? WHERE id=?",
-        (d["codigo"], d["descricao"], d["categoria"], d["unidade"], d["localizacao"],
-         d["estoque_minimo"], d["estoque_maximo"], d["prazo_entrega"], d["observacoes"], iid))
+        "UPDATE itens SET codigo=?, descricao=?, categoria=?, unidade=?, estoque_minimo=?,"
+        " estoque_maximo=?, observacoes=? WHERE id=?",
+        (d["codigo"], d["descricao"], d["categoria"], d["unidade"],
+         d["estoque_minimo"], d["estoque_maximo"], d["observacoes"], iid))
     registrar(db, "EDITAR", "item", iid, iid, f"Editou o item {d['codigo']} — {d['descricao']}")
     db.commit()
     return jsonify({"ok": True})
@@ -687,7 +672,7 @@ def api_criar_movimento():
         dt = parse_data(data.get("data"))
         if dt > hoje():
             return erro("A data da movimentação não pode estar no futuro.")
-        doc, contra, obs = txt(data.get("documento"), 60), txt(data.get("contraparte"), 100), txt(data.get("observacoes"), 300)
+        obs = txt(data.get("observacoes"), 300)
         if tipo == "AJUSTE":
             contado = parse_num(data.get("saldo_contado"))
             if contado < 0:
@@ -710,13 +695,12 @@ def api_criar_movimento():
     except ValueError as e:
         return erro(str(e))
     try:
-        mid = inserir_movimento(db, iid, tipo, qtde, dt, doc, contra, obs)
+        mid = inserir_movimento(db, iid, tipo, qtde, dt, obs)
         recalcular_item(db, iid)
         rot = {"ENTRADA": "Entrada", "SAIDA": "Saída", "AJUSTE": "Ajuste"}[tipo]
         sinal = "+" if qtde > 0 else "−"
         registrar(db, tipo, "movimento", mid, iid,
-                  f"{rot} de {sinal}{fmt_qtd(abs(qtde))} {it['unidade']} — {nome_item(it)}"
-                  + (f" · {doc}" if doc else "") + (f" · {contra}" if contra else ""))
+                  f"{rot} de {sinal}{fmt_qtd(abs(qtde))} {it['unidade']} — {nome_item(it)}")
         db.commit()
     except SaldoNegativo as e:
         db.rollback()
@@ -747,6 +731,91 @@ def api_estornar_movimento(mid):
         db.rollback()
         raise
     return jsonify({"ok": True})
+
+
+# ============================================================================
+# Baixa de vários materiais de uma vez
+# ============================================================================
+@app.route("/api/movimentos/lote", methods=["POST"])
+def api_saida_lote():
+    """Dá baixa em vários itens de uma vez. É tudo ou nada: se alguma linha não puder ser
+    lançada, nada é gravado e a resposta lista o que corrigir."""
+    db = get_db()
+    data = request.get_json(silent=True) or {}
+    linhas = data.get("itens")
+    if not isinstance(linhas, list) or not linhas:
+        return erro("Escolha ao menos um material.")
+    if len(linhas) > 200:
+        return erro("Máximo de 200 materiais por baixa.")
+    try:
+        dt = parse_data(data.get("data"))
+    except ValueError as e:
+        return erro(str(e))
+    if dt > hoje():
+        return erro("A data da baixa não pode estar no futuro.")
+    obs = txt(data.get("observacoes"), 300)
+    erros, feitos = [], []
+    try:
+        for n, ln in enumerate(linhas, start=1):
+            try:
+                iid = int(ln.get("item_id"))
+                q = parse_num(ln.get("qtde"))
+            except (TypeError, ValueError, AttributeError):
+                erros.append(f"Linha {n}: item ou quantidade inválidos.")
+                continue
+            it = item_completo(db, iid)
+            if not it:
+                erros.append(f"Linha {n}: item não encontrado.")
+                continue
+            if not it["ativo"]:
+                erros.append(f"{nome_item(it)}: item arquivado.")
+                continue
+            if q <= 0:
+                erros.append(f"{nome_item(it)}: a quantidade deve ser maior que zero.")
+                continue
+            mid = inserir_movimento(db, iid, "SAIDA", -q, dt, obs)
+            try:
+                recalcular_item(db, iid)
+            except SaldoNegativo:
+                erros.append(f"{nome_item(it)}: saldo insuficiente (há {fmt_qtd(it['saldo'])} {it['unidade']}, "
+                             f"pedido {fmt_qtd(q)}).")
+                continue
+            registrar(db, "SAIDA", "movimento", mid, iid,
+                      f"Saída de −{fmt_qtd(q)} {it['unidade']} — {nome_item(it)} (baixa em lote)")
+            feitos.append(iid)
+        if erros:
+            db.rollback()
+            return jsonify({"ok": False, "error": "Nada foi lançado. Corrija os itens abaixo e tente de novo.",
+                            "erros": erros}), 409
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return jsonify({"ok": True, "lancadas": len(feitos)})
+
+
+# ============================================================================
+# Zerar o sistema
+# ============================================================================
+@app.route("/api/zerar", methods=["POST"])
+def api_zerar():
+    """Apaga todos os itens e movimentações. O Histórico é mantido e recebe o registro desta ação."""
+    db = get_db()
+    if str((request.get_json(silent=True) or {}).get("confirmacao") or "").strip().upper() != "ZERAR":
+        return erro("Para confirmar, digite ZERAR.")
+    n_it = db.execute("SELECT COUNT(*) AS n FROM itens").fetchone()["n"]
+    n_mv = db.execute("SELECT COUNT(*) AS n FROM movimentos").fetchone()["n"]
+    try:
+        db.execute("DELETE FROM movimentos")
+        db.execute("DELETE FROM itens")
+        registrar(db, "EXCLUIR", "sistema", None, None,
+                  f"ZEROU O SISTEMA: apagou {n_it} item(ns) e {n_mv} movimentação(ões)")
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return jsonify({"ok": True, "itens": n_it, "movimentos": n_mv})
+
 
 
 # ============================================================================
@@ -807,7 +876,7 @@ def api_stats():
         "criticos_total": len(criticos),
         "no_ponto_pedido": analise_reposicao(db)["pedir"],
         "criticos": [{k: c[k] for k in ("id", "codigo", "descricao", "unidade", "saldo", "estoque_minimo",
-                                          "situacao", "repor", "localizacao")} for c in criticos[:8]],
+                                          "situacao", "repor")} for c in criticos[:8]],
         "top_saldo": [{"id": i["id"], "codigo": i["codigo"], "descricao": i["descricao"], "unidade": i["unidade"],
                        "saldo": i["saldo"]} for i in sorted(ativos, key=lambda i: -i["saldo"])[:5] if i["saldo"] > 0],
         "top_saidas": [{"id": iid, "codigo": por_id[iid]["codigo"], "descricao": por_id[iid]["descricao"],
@@ -842,9 +911,9 @@ def api_historico():
 
 
 # ============================================================================
-# Reposição: curva ABC, estoque de segurança e ponto de pedido
+# Reposição: consumo, estoque de segurança, ponto de pedido e cobertura
 # ============================================================================
-CONFIG_PADRAO = {"janela": 180, "ns_A": 98.0, "ns_B": 95.0, "ns_C": 90.0}
+CONFIG_PADRAO = {"janela": 180, "prazo": 7.0, "ns": 95.0}
 JANELAS = (30, 60, 90, 180, 365)
 
 
@@ -857,6 +926,7 @@ def ler_config(db):
             except (TypeError, ValueError):
                 pass
     cfg["janela"] = int(cfg["janela"])
+    cfg["prazo"] = int(cfg["prazo"])
     return cfg
 
 
@@ -865,10 +935,14 @@ def _ceil(x):
 
 
 def analise_reposicao(db, janela=None):
-    """Para cada item ativo: classe ABC (por quantidade consumida), consumo médio diário,
-    estoque de segurança  SS = Z · σ · √L   e ponto de pedido  PP = d · L + SS."""
+    """Para cada item ativo: consumo médio diário (d) e desvio (σ), estoque de segurança
+    SS = Z · σ · √L, ponto de pedido PP = d · L + SS e cobertura em dias. O prazo de entrega (L)
+    e o nível de serviço são parâmetros gerais da tela Reposição."""
     cfg = ler_config(db)
     W = int(janela or cfg["janela"])
+    L = cfg["prazo"]
+    ns = max(50.0, min(99.9, cfg["ns"]))
+    z = NormalDist().inv_cdf(ns / 100)
     hj = date.today()
     ini = (hj - timedelta(days=W - 1)).strftime("%Y-%m-%d")
     itens = [completar_item(r) for r in db.execute(SQL_ITENS + " WHERE i.ativo = 1").fetchall()]
@@ -891,50 +965,30 @@ def analise_reposicao(db, janela=None):
             var = max(0.0, (sum(v * v for v in vals) - n * media * media) / (n - 1))
         else:
             var = 0.0
-        linhas.append({
+        desvio = math.sqrt(var)
+        ss = _ceil(z * desvio * math.sqrt(L)) if L > 0 else 0.0
+        pp = _ceil(media * L + ss) if L > 0 else 0.0
+        l = {
             "id": it["id"], "codigo": it["codigo"], "descricao": it["descricao"], "unidade": it["unidade"],
             "categoria": it["categoria"], "saldo": it["saldo"], "estoque_maximo": it["estoque_maximo"],
-            "prazo": it["prazo_entrega"], "consumo": round(total, 3), "dias_base": n,
-            "consumo_dia": round(media, 4), "desvio_dia": round(math.sqrt(var), 4),
-            "poucos_dados": n < 30,
-        })
-
-    # Curva ABC: ordena por consumo; A = até 80% acumulado, B = até 95%, C = o resto
-    total_geral = sum(l["consumo"] for l in linhas) or 0.0
-    acum = 0.0
-    for l in sorted([x for x in linhas if x["consumo"] > 0], key=lambda x: -x["consumo"]):
-        l["pct"] = l["consumo"] / total_geral * 100
-        l["classe"] = "A" if acum < 80 else ("B" if acum < 95 else "C")
-        acum += l["pct"]
-        l["pct_acum"] = min(100.0, acum)
-    for l in linhas:
-        if "classe" not in l:
-            l.update(classe=None, pct=0.0, pct_acum=None)
-
-    for l in linhas:
-        ns = max(50.0, min(99.9, cfg["ns_" + (l["classe"] or "C")]))
-        z = NormalDist().inv_cdf(ns / 100)
-        L = l["prazo"]
-        ss = _ceil(z * l["desvio_dia"] * math.sqrt(L)) if L > 0 else 0.0
-        pp = _ceil(l["consumo_dia"] * L + ss) if L > 0 else 0.0
-        l.update(nivel_servico=ns, z=round(z, 3), seguranca=ss, ponto_pedido=pp)
-        l["cobertura_dias"] = round(l["saldo"] / l["consumo_dia"], 1) if l["consumo_dia"] > 0 else None
-        l["pedir"] = bool(L > 0 and l["consumo"] > 0 and l["saldo"] <= pp)
+            "consumo": round(total, 3), "dias_base": n,
+            "consumo_dia": round(media, 4), "desvio_dia": round(desvio, 4),
+            "poucos_dados": n < 30, "seguranca": ss, "ponto_pedido": pp,
+        }
+        l["cobertura_dias"] = round(l["saldo"] / media, 1) if media > 0 else None
+        l["pedir"] = bool(L > 0 and total > 0 and l["saldo"] <= pp)
         l["qtd_sugerida"] = (_ceil(max(0.0, l["estoque_maximo"] - l["saldo"]))
                              if l["pedir"] and l["estoque_maximo"] > 0 else None)
+        linhas.append(l)
 
-    resumo = {}
-    for c in ("A", "B", "C"):
-        grupo = [l for l in linhas if l["classe"] == c]
-        resumo[c] = {"itens": len(grupo),
-                     "pct_consumo": round(sum(l["consumo"] for l in grupo) / total_geral * 100, 1) if total_geral else 0.0,
-                     "nivel_servico": cfg["ns_" + c]}
-    resumo["sem_consumo"] = len([l for l in linhas if l["classe"] is None])
-    pedir_n = len([l for l in linhas if l["pedir"]])
-    ordem = {"A": 0, "B": 1, "C": 2, None: 3}
-    linhas.sort(key=lambda l: (ordem[l["classe"]], -l["consumo"], l["descricao"]))
-    return {"janela": W, "config": cfg, "resumo": resumo, "pedir": pedir_n, "sem_prazo": len([l for l in linhas if l["prazo"] == 0 and l["consumo"] > 0]),
-            "total_consumo": round(total_geral, 3), "itens": linhas}
+    # Quem precisa de pedido primeiro; depois quem tem menos cobertura; itens sem consumo no fim.
+    linhas.sort(key=lambda l: (0 if l["pedir"] else 1,
+                               l["cobertura_dias"] if l["cobertura_dias"] is not None else 1e9,
+                               l["descricao"]))
+    return {"janela": W, "config": cfg, "z": round(z, 3),
+            "pedir": len([l for l in linhas if l["pedir"]]),
+            "sem_consumo": len([l for l in linhas if l["consumo"] <= 0]),
+            "total_consumo": round(sum(l["consumo"] for l in linhas), 3), "itens": linhas}
 
 
 @app.route("/reposicao")
@@ -962,12 +1016,16 @@ def api_config():
             if not 7 <= j <= 730:
                 return erro("O período de análise deve ficar entre 7 e 730 dias.")
             novos["janela"] = j
-        for c in ("A", "B", "C"):
-            if "ns_" + c in data:
-                v = parse_num(data["ns_" + c])
-                if not 50 <= v <= 99.9:
-                    return erro("O nível de serviço deve ficar entre 50% e 99,9%.")
-                novos["ns_" + c] = v
+        if "prazo" in data:
+            p = parse_num(data["prazo"])
+            if not 1 <= p <= 365 or p != int(p):
+                return erro("O prazo de entrega deve ser um número inteiro de dias, de 1 a 365.")
+            novos["prazo"] = int(p)
+        if "ns" in data:
+            v = parse_num(data["ns"])
+            if not 50 <= v <= 99.9:
+                return erro("O nível de serviço deve ficar entre 50% e 99,9%.")
+            novos["ns"] = v
     except ValueError as e:
         return erro(str(e))
     for k, v in novos.items():
@@ -982,24 +1040,6 @@ def api_config():
     return jsonify({"ok": True, "config": ler_config(db)})
 
 
-@app.route("/api/itens/<int:iid>/prazo", methods=["PUT"])
-def api_prazo_item(iid):
-    db = get_db()
-    it = item_completo(db, iid)
-    if not it:
-        return erro("Item não encontrado.", 404)
-    try:
-        p = parse_num((request.get_json(silent=True) or {}).get("prazo_entrega"))
-    except ValueError as e:
-        return erro(str(e))
-    if p < 0 or p > 365 or p != int(p):
-        return erro("O prazo de entrega deve ser um número inteiro de dias (0 a 365).")
-    db.execute("UPDATE itens SET prazo_entrega = ? WHERE id = ?", (int(p), iid))
-    registrar(db, "EDITAR", "item", iid, iid, f"Prazo de entrega de {nome_item(it)}: {int(p)} dia(s)")
-    db.commit()
-    return jsonify({"ok": True})
-
-
 @app.route("/api/reposicao.xlsx")
 def api_reposicao_xlsx():
     from openpyxl import Workbook
@@ -1008,16 +1048,20 @@ def api_reposicao_xlsx():
     wb = Workbook()
     ws = wb.active
     ws.title = "Reposição"
-    ws.append(["Classe ABC", "Código", "Item", "Unidade", "Saldo", f"Consumo ({an['janela']} dias)", "% do consumo",
-               "% acumulado", "Consumo médio/dia", "Desvio/dia", "Prazo de entrega (dias)", "Nível de serviço (%)",
-               "Estoque de segurança", "Ponto de pedido", "Cobertura (dias)", "Situação", "Qtd. sugerida"])
+    ws.append(["Código", "Item", "Unidade", "Saldo", f"Consumo ({an['janela']} dias)", "Consumo médio/dia",
+               "Desvio/dia", "Estoque de segurança", "Ponto de pedido", "Cobertura (dias)", "Situação", "Qtd. sugerida"])
     for l in an["itens"]:
-        ws.append([l["classe"] or "Sem consumo", l["codigo"], l["descricao"], l["unidade"], l["saldo"], l["consumo"],
-                   round(l["pct"], 2), round(l["pct_acum"], 2) if l["pct_acum"] is not None else None,
-                   l["consumo_dia"], l["desvio_dia"], l["prazo"], l["nivel_servico"], l["seguranca"], l["ponto_pedido"],
-                   l["cobertura_dias"], "Pedir agora" if l["pedir"] else ("Defina o prazo" if l["prazo"] == 0 and l["consumo"] > 0 else "Ok"),
+        ws.append([l["codigo"], l["descricao"], l["unidade"], l["saldo"], l["consumo"],
+                   l["consumo_dia"], l["desvio_dia"], l["seguranca"], l["ponto_pedido"],
+                   l["cobertura_dias"], "Pedir agora" if l["pedir"] else ("Sem consumo" if l["consumo"] <= 0 else "Ok"),
                    l["qtd_sugerida"]])
-    _estilo_planilha(ws, [11, 14, 44, 9, 10, 16, 12, 12, 16, 12, 16, 16, 16, 14, 14, 16, 14])
+    _estilo_planilha(ws, [14, 44, 9, 10, 16, 16, 12, 16, 14, 14, 14, 14])
+    ws2 = wb.create_sheet("Parâmetros")
+    ws2.append(["Parâmetro", "Valor"])
+    ws2.append(["Prazo de entrega (dias)", an["config"]["prazo"]])
+    ws2.append(["Nível de serviço (%)", an["config"]["ns"]])
+    ws2.append(["Período analisado (dias)", an["janela"]])
+    _estilo_planilha(ws2, [28, 12])
     registrar(db, "EXPORTAR", "planilha", None, None, "Exportou a análise de reposição para Excel")
     db.commit()
     buf = io.BytesIO()
@@ -1052,22 +1096,20 @@ def api_exportar():
     wb = Workbook()
     ws = wb.active
     ws.title = "Estoque"
-    ws.append(["Código", "Descrição", "Categoria", "Unidade", "Localização", "Saldo", "Estoque mínimo",
-               "Estoque máximo", "Prazo de entrega (dias)", "Situação", "Ativo"])
+    ws.append(["Código", "Descrição", "Categoria", "Unidade", "Saldo", "Estoque mínimo",
+               "Estoque máximo", "Situação", "Ativo"])
     for r in db.execute(SQL_ITENS + " ORDER BY i.descricao").fetchall():
         i = completar_item(r)
-        ws.append([i["codigo"], i["descricao"], i["categoria"], i["unidade"], i["localizacao"], i["saldo"],
-                   i["estoque_minimo"], i["estoque_maximo"], i["prazo_entrega"], ROT_SIT[i["situacao"]], "Sim" if i["ativo"] else "Não"])
-    _estilo_planilha(ws, [14, 44, 18, 9, 16, 11, 14, 14, 18, 18, 8])
+        ws.append([i["codigo"], i["descricao"], i["categoria"], i["unidade"], i["saldo"],
+                   i["estoque_minimo"], i["estoque_maximo"], ROT_SIT[i["situacao"]], "Sim" if i["ativo"] else "Não"])
+    _estilo_planilha(ws, [14, 44, 18, 9, 11, 14, 14, 18, 8])
     ws2 = wb.create_sheet("Movimentações")
-    ws2.append(["Data", "Tipo", "Código", "Item", "Quantidade", "Unidade", "Documento",
-                "Origem/Destino", "Observações", "Usuário"])
+    ws2.append(["Data", "Tipo", "Código", "Item", "Quantidade", "Unidade", "Observações", "Usuário"])
     for m in db.execute("SELECT m.*, i.codigo, i.descricao, i.unidade FROM movimentos m JOIN itens i ON i.id = m.item_id"
                         " ORDER BY m.data DESC, m.id DESC").fetchall():
         ws2.append([fmt_data(m["data"]), {"ENTRADA": "Entrada", "SAIDA": "Saída", "AJUSTE": "Ajuste"}[m["tipo"]],
-                    m["codigo"], m["descricao"], m["qtde"], m["unidade"], m["documento"], m["contraparte"],
-                    m["observacoes"], m["usuario"]])
-    _estilo_planilha(ws2, [12, 10, 14, 44, 12, 9, 16, 22, 30, 16])
+                    m["codigo"], m["descricao"], m["qtde"], m["unidade"], m["observacoes"], m["usuario"]])
+    _estilo_planilha(ws2, [12, 10, 14, 44, 12, 9, 30, 16])
     registrar(db, "EXPORTAR", "planilha", None, None, "Exportou o estoque para Excel")
     db.commit()
     buf = io.BytesIO()
@@ -1077,14 +1119,13 @@ def api_exportar():
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
-COLUNAS_MODELO = ["Código", "Descrição", "Categoria", "Unidade", "Localização", "Estoque mínimo",
-                  "Estoque máximo", "Prazo de entrega (dias)", "Saldo inicial", "Data do saldo inicial (opcional)"]
+COLUNAS_MODELO = ["Código", "Descrição", "Categoria", "Unidade", "Estoque mínimo",
+                  "Estoque máximo", "Saldo inicial", "Data do saldo inicial (opcional)"]
 ALIAS = {
     "codigo": "codigo", "cod": "codigo", "descricao": "descricao", "item": "descricao", "nome": "descricao",
     "categoria": "categoria", "grupo": "categoria", "unidade": "unidade", "und": "unidade", "un": "unidade",
-    "localizacao": "localizacao", "local": "localizacao", "estoque minimo": "estoque_minimo", "minimo": "estoque_minimo",
+    "estoque minimo": "estoque_minimo", "minimo": "estoque_minimo",
     "estoque maximo": "estoque_maximo", "maximo": "estoque_maximo",
-    "prazo de entrega": "prazo_entrega", "prazo": "prazo_entrega", "lead time": "prazo_entrega",
     "data do saldo inicial (opcional)": "data_saldo", "data do saldo inicial": "data_saldo", "data do saldo": "data_saldo", "data saldo": "data_saldo",
     "saldo inicial": "saldo_inicial", "saldo": "saldo_inicial", "quantidade": "saldo_inicial", "qtde": "saldo_inicial",
 }
@@ -1097,9 +1138,9 @@ def api_modelo_importacao():
     ws = wb.active
     ws.title = "Itens"
     ws.append(COLUNAS_MODELO)
-    ws.append(["PAP-A4", "Papel A4 75g (resma 500 fls)", "Material de expediente", "RESMA", "Prateleira A1", 20, 100, 7, 45, ""])
-    ws.append(["CAN-AZ", "Caneta esferográfica azul", "Material de expediente", "UN", "Prateleira A2", 50, 300, 5, 120, ""])
-    _estilo_planilha(ws, [14, 44, 24, 10, 16, 15, 15, 18, 14, 20])
+    ws.append(["PAP-A4", "Papel A4 75g (resma 500 fls)", "Material de expediente", "RESMA", 20, 100, 45, ""])
+    ws.append(["CAN-AZ", "Caneta esferográfica azul", "Material de expediente", "UN", 50, 300, 120, ""])
+    _estilo_planilha(ws, [14, 44, 24, 10, 15, 15, 14, 20])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -1163,17 +1204,17 @@ def api_importar():
                 i = mapa.get(k)
                 return lin[i] if i is not None and i < len(lin) else None
             try:
-                d, msg = dados_item({k: col(k) for k in ("codigo", "descricao", "categoria", "unidade", "localizacao",
-                                                         "estoque_minimo", "estoque_maximo", "prazo_entrega")})
+                d, msg = dados_item({k: col(k) for k in ("codigo", "descricao", "categoria", "unidade",
+                                                         "estoque_minimo", "estoque_maximo")})
                 if msg:
                     erros.append(f"Linha {n}: {msg}")
                     continue
                 chave = sem_acento(d["codigo"])
                 if chave in existentes:
-                    db.execute("UPDATE itens SET descricao=?, categoria=?, unidade=?, localizacao=?, estoque_minimo=?,"
-                               " estoque_maximo=?, prazo_entrega=? WHERE id=?",
-                               (d["descricao"], d["categoria"], d["unidade"], d["localizacao"],
-                                d["estoque_minimo"], d["estoque_maximo"], d["prazo_entrega"], existentes[chave]))
+                    db.execute("UPDATE itens SET descricao=?, categoria=?, unidade=?, estoque_minimo=?,"
+                               " estoque_maximo=? WHERE id=?",
+                               (d["descricao"], d["categoria"], d["unidade"],
+                                d["estoque_minimo"], d["estoque_maximo"], existentes[chave]))
                     atualizados += 1
                     # Reimportar com saldo/data do saldo inicial corrige o saldo inicial, mas só se o item
                     # ainda não teve nenhuma outra movimentação (nada é reescrito no histórico real).
@@ -1206,14 +1247,14 @@ def api_importar():
                         erros.append(f"Linha {n}: a data do saldo inicial não pode estar no futuro.")
                         continue
                     cur = db.execute(
-                        "INSERT INTO itens (codigo, descricao, categoria, unidade, localizacao, estoque_minimo,"
-                        " estoque_maximo, prazo_entrega, ativo, observacoes, criado_em) VALUES (?,?,?,?,?,?,?,?,1,?,?)",
-                        (d["codigo"], d["descricao"], d["categoria"], d["unidade"], d["localizacao"],
-                         d["estoque_minimo"], d["estoque_maximo"], d["prazo_entrega"], "", agora()))
+                        "INSERT INTO itens (codigo, descricao, categoria, unidade, estoque_minimo,"
+                        " estoque_maximo, ativo, observacoes, criado_em) VALUES (?,?,?,?,?,?,1,?,?)",
+                        (d["codigo"], d["descricao"], d["categoria"], d["unidade"],
+                         d["estoque_minimo"], d["estoque_maximo"], "", agora()))
                     iid = cur.lastrowid
                     existentes[chave] = iid
                     if saldo > EPS:
-                        inserir_movimento(db, iid, "ENTRADA", saldo, dt_saldo, "Importação", "", "Saldo inicial importado")
+                        inserir_movimento(db, iid, "ENTRADA", saldo, dt_saldo, "Saldo inicial importado")
                         recalcular_item(db, iid)
                     criados += 1
             except ValueError as e:
@@ -1231,14 +1272,11 @@ def api_importar():
 # ============================================================================
 # Saídas em lote (planilha)
 # ============================================================================
-COLUNAS_SAIDAS = ["Código", "Quantidade", "Data", "Documento", "Destino / requisitante", "Observações"]
+COLUNAS_SAIDAS = ["Código", "Quantidade", "Data", "Observações"]
 ALIAS_SAIDAS = {
     "codigo": "codigo", "cod": "codigo", "item": "codigo",
     "quantidade": "qtde", "qtde": "qtde", "qtd": "qtde", "quant": "qtde",
     "data": "data", "data da saida": "data",
-    "documento": "documento", "doc": "documento", "requisicao": "documento",
-    "destino / requisitante": "contraparte", "destino": "contraparte", "requisitante": "contraparte",
-    "setor": "contraparte", "contraparte": "contraparte",
     "observacoes": "obs", "observacao": "obs", "obs": "obs",
 }
 
@@ -1253,9 +1291,9 @@ def api_modelo_saidas():
     ws.title = "Saídas"
     ws.append(COLUNAS_SAIDAS)
     exemplo = [(i["codigo"]) for i in itens[:2]] or ["PAP-A4", "CAN-AZ"]
-    ws.append([exemplo[0], 5, hoje(), "Req 001/2026", "Seção de Pessoal", "Exemplo — apague esta linha"])
-    ws.append([exemplo[-1], 20, hoje(), "Req 002/2026", "Almoxarifado", ""])
-    _estilo_planilha(ws, [16, 12, 14, 18, 28, 36])
+    ws.append([exemplo[0], 5, hoje(), "Exemplo — apague esta linha"])
+    ws.append([exemplo[-1], 20, hoje(), ""])
+    _estilo_planilha(ws, [16, 12, 14, 40])
     ref = wb.create_sheet("Itens cadastrados")
     ref.append(["Código", "Descrição", "Unidade", "Saldo atual"])
     for i in itens:
@@ -1331,8 +1369,8 @@ def api_importar_saidas():
                 if dt > hoje():
                     erros.append(f"Linha {n}: a data não pode estar no futuro.")
                     continue
-                doc, contra, obs = txt(col("documento"), 60), txt(col("contraparte"), 100), txt(col("obs"), 300)
-                mid = inserir_movimento(db, iid, "SAIDA", -q, dt, doc, contra, obs)
+                obs = txt(col("obs"), 300)
+                mid = inserir_movimento(db, iid, "SAIDA", -q, dt, obs)
                 try:
                     recalcular_item(db, iid)
                 except SaldoNegativo:
@@ -1340,8 +1378,7 @@ def api_importar_saidas():
                     erros.append(f"Linha {n}: saldo insuficiente de {cod} para sair {fmt_qtd(q)} {it['unidade']}.")
                     continue
                 registrar(db, "SAIDA", "movimento", mid, iid,
-                          f"Saída de −{fmt_qtd(q)} {it['unidade']} — {nome_item(it)}"
-                          + (f" · {doc}" if doc else "") + (f" · {contra}" if contra else "") + " (planilha)")
+                          f"Saída de −{fmt_qtd(q)} {it['unidade']} — {nome_item(it)} (planilha)")
                 lancadas += 1
             except ValueError as e:
                 erros.append(f"Linha {n}: {e}")

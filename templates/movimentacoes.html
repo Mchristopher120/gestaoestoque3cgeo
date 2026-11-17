@@ -8,6 +8,7 @@
                 <p class="page-sub">Entradas, saídas e ajustes de inventário</p>
             </div>
             <div class="detail-actions">
+                <a class="btn btn-secondary btn-sm" href="/estoque?lote=1">{{ ico('arrow-up') }} Baixa em lote</a>
                 <button class="btn btn-secondary btn-sm" id="btnSaida">{{ ico('arrow-up') }} Saída</button>
                 <button class="btn btn-primary btn-sm" id="btnEntrada">{{ ico('arrow-down') }} Entrada</button>
             </div>
@@ -15,7 +16,7 @@
 
         <section class="card">
             <div class="toolbar">
-                <input type="search" id="fBusca" class="input" placeholder="Buscar item, documento ou origem/destino…" aria-label="Buscar">
+                <input type="search" id="fBusca" class="input" placeholder="Buscar por item, código ou usuário…" aria-label="Buscar">
                 <select id="fTipo" class="input" aria-label="Tipo">
                     <option value="">Todos os tipos</option>
                     <option value="ENTRADA">Entradas</option>
@@ -34,8 +35,6 @@
                             <th data-key="tipo">Tipo</th>
                             <th data-key="descricao" class="text-left">Item</th>
                             <th data-key="qtde">Quantidade</th>
-                            <th data-key="documento">Documento</th>
-                            <th data-key="contraparte">Origem / Destino</th>
                             <th data-key="usuario">Usuário</th>
                             <th></th>
                         </tr>

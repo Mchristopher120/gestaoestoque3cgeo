@@ -25,7 +25,6 @@
             <ol class="import-passos">
                 <li>Baixe o modelo e preencha uma linha por item. Só <strong>Código</strong> e <strong>Descrição</strong> são obrigatórios.</li>
                 <li>Se o código já existir, os dados do cadastro são <strong>atualizados</strong> (o saldo não muda — exceto o <strong>saldo inicial</strong> de itens que ainda não tiveram nenhuma outra movimentação, que pode ser corrigido reenviando a planilha).</li>
-                <li>A coluna <strong>Prazo de entrega (dias)</strong> alimenta o ponto de pedido e o estoque de segurança.</li>
                 <li>Itens novos entram com o <strong>Saldo inicial</strong> informado, na data de hoje (ou na <strong>Data do saldo inicial</strong>, se preenchida — use uma data antiga se for lançar saídas com data anterior).</li>
             </ol>
         </section>
@@ -53,12 +52,38 @@
             </form>
             <ol class="import-passos">
                 <li>Baixe o modelo: ele já traz a lista dos itens cadastrados e o saldo atual.</li>
-                <li>Preencha uma linha por saída. Só <strong>Código</strong> e <strong>Quantidade</strong> são obrigatórios; sem data, vale hoje.</li>
+                <li>Preencha uma linha por saída. Só <strong>Código</strong> e <strong>Quantidade</strong> são obrigatórios; data e observações são opcionais (sem data, vale hoje).</li>
                 <li>As saídas entram na ordem das linhas. Se o saldo não bastar, <strong>a linha é ignorada</strong> e o motivo aparece no resultado.</li>
                 <li>Cada saída pode ser estornada depois em <a href="/movimentacoes">Movimentações</a>.</li>
             </ol>
         </section>
         <div id="resultadoSai"></div>
+
+        <div class="page-head" style="margin-top:28px">
+            <div>
+                <h2 class="page-title">Zerar o sistema</h2>
+                <p class="page-sub">Apaga todos os itens e movimentações para começar do zero</p>
+            </div>
+        </div>
+        <section class="card zona-perigo">
+            <p><strong>Esta ação não pode ser desfeita.</strong> Todos os itens, saldos e movimentações são apagados. O Histórico de alterações é mantido e registra quem zerou e quando. Se precisar guardar os dados, baixe antes o Excel em <a href="/api/exportar.xlsx">Exportar estoque</a>.</p>
+            <button class="btn btn-danger" id="btnZerar">{{ ico('trash') }} Zerar o sistema</button>
+        </section>
+
+        <div class="modal" id="modalZerar" role="dialog" aria-modal="true" aria-labelledby="zerarTitulo">
+            <div class="modal-box">
+                <h3 id="zerarTitulo">Zerar o sistema?</h3>
+                <form class="modal-body" id="formZerar" autocomplete="off" novalidate>
+                    <p>Serão apagados <strong id="zerarResumo">todos os itens e movimentações</strong>. Para confirmar, digite <strong>ZERAR</strong> abaixo.</p>
+                    <input id="zerarTexto" class="input" placeholder="ZERAR" aria-label="Digite ZERAR para confirmar">
+                    <div class="alert-error" id="zerarErro" role="alert" hidden><div></div></div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-ghost" id="zerarCancelar">Cancelar</button>
+                        <button type="submit" class="btn btn-danger" id="zerarConfirmar" disabled>Apagar tudo</button>
+                    </div>
+                </form>
+            </div>
+        </div>
 {% endblock %}
 {% block scripts %}
     <script src="{{ url_for('static', filename='importar.js') }}"></script>

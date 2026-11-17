@@ -29,14 +29,10 @@ function movAtualizar() {
     $('movTitulo').textContent = { ENTRADA: 'Registrar entrada', SAIDA: 'Registrar saída', AJUSTE: 'Ajuste de inventário' }[t];
     $('gQtde').hidden = t === 'AJUSTE';
     $('gContado').hidden = t !== 'AJUSTE';
-    $('lblContra').parentElement.hidden = t === 'AJUSTE';
-    $('lblDoc').textContent = t === 'ENTRADA' ? 'Nota fiscal / documento' : t === 'SAIDA' ? 'Requisição / documento' : 'Documento (opcional)';
-    $('lblContra').textContent = t === 'ENTRADA' ? 'Fornecedor' : 'Destino (setor ou pessoa)';
     $('lblObs').textContent = t === 'AJUSTE' ? 'Motivo do ajuste (obrigatório)' : 'Observações';
     $('movSalvar').textContent = t === 'AJUSTE' ? 'Ajustar saldo' : 'Registrar';
     $('movSaldoInfo').innerHTML = it
-        ? `Saldo atual: <strong>${fmtNum(it.saldo)} ${escapeHTML(it.unidade)}</strong>` +
-          (it.localizacao ? ` · ${escapeHTML(it.localizacao)}` : '')
+        ? `Saldo atual: <strong>${fmtNum(it.saldo)} ${escapeHTML(it.unidade)}</strong>`
         : '';
     movResumo();
 }
@@ -67,7 +63,7 @@ async function movSalvar(ev) {
     const t = movTipoAtual();
     const corpo = {
         tipo: t, item_id: $('movItem').value, data: $('movData').value,
-        documento: $('movDoc').value, contraparte: t === 'AJUSTE' ? '' : $('movContra').value, observacoes: $('movObs').value,
+        observacoes: $('movObs').value,
     };
     if (t === 'AJUSTE') corpo.saldo_contado = $('movContado').value;
     else corpo.qtde = $('movQtde').value;
