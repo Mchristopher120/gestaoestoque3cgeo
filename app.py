@@ -1021,11 +1021,6 @@ def api_config():
             if not 1 <= p <= 365 or p != int(p):
                 return erro("O prazo de entrega deve ser um número inteiro de dias, de 1 a 365.")
             novos["prazo"] = int(p)
-        if "ns" in data:
-            v = parse_num(data["ns"])
-            if not 50 <= v <= 99.9:
-                return erro("O nível de serviço deve ficar entre 50% e 99,9%.")
-            novos["ns"] = v
     except ValueError as e:
         return erro(str(e))
     for k, v in novos.items():
@@ -1059,7 +1054,6 @@ def api_reposicao_xlsx():
     ws2 = wb.create_sheet("Parâmetros")
     ws2.append(["Parâmetro", "Valor"])
     ws2.append(["Prazo de entrega (dias)", an["config"]["prazo"]])
-    ws2.append(["Nível de serviço (%)", an["config"]["ns"]])
     ws2.append(["Período analisado (dias)", an["janela"]])
     _estilo_planilha(ws2, [28, 12])
     registrar(db, "EXPORTAR", "planilha", None, None, "Exportou a análise de reposição para Excel")

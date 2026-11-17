@@ -31,11 +31,7 @@ function renderCards() {
             <div class="kpi-value">${fmtNum(c.prazo)} <span class="kpi-unit">dias</span></div>
             <div class="kpi-sub">igual para todos os itens</div>
         </div>
-        <div class="kpi slate">
-            <div class="kpi-label">Nível de serviço</div>
-            <div class="kpi-value">${fmtNum(c.ns)}<span class="kpi-unit">%</span></div>
-            <div class="kpi-sub">chance de não faltar no prazo</div>
-        </div>`;
+    `;
 }
 
 function filtrar() {
@@ -78,10 +74,10 @@ $('selJanela').addEventListener('change', async () => {
     carregar(+$('selJanela').value);
 });
 
-// Parâmetros (prazo de entrega e nível de serviço, iguais para todos os itens)
+// Parâmetros (prazo de entrega, igual para todos os itens)
 $('btnParam').addEventListener('click', () => {
     const c = R.dados.config;
-    $('parPrazo').value = String(c.prazo); $('parNs').value = String(c.ns).replace('.', ',');
+    $('parPrazo').value = String(c.prazo);
     $('paramErro').hidden = true;
     abrirModal('modalParam');
 });
@@ -89,7 +85,7 @@ $('paramCancelar').addEventListener('click', () => fecharModal('modalParam'));
 $('formParam').addEventListener('submit', async ev => {
     ev.preventDefault();
     try {
-        const r = await enviarJSON('/api/config', 'PUT', { prazo: $('parPrazo').value, ns: $('parNs').value });
+        const r = await enviarJSON('/api/config', 'PUT', { prazo: $('parPrazo').value });
         if (!r.ok) { $('paramErro').firstElementChild.textContent = r.error; $('paramErro').hidden = false; return; }
         fecharModal('modalParam');
         showToast('Parâmetros salvos.', 'success');

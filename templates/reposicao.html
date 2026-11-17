@@ -21,18 +21,6 @@
 
         <section class="kpis" id="repCards"></section>
 
-        <details class="card como-calcula">
-            <summary>{{ ico('chart-bar') }} Como os números são calculados</summary>
-            <ul>
-                <li><strong>Consumo médio diário (d):</strong> total de saídas ÷ dias do período. Para itens novos, contam só os dias desde a primeira movimentação.</li>
-                <li><strong>Estoque de segurança</strong> = Z × σ × √L, em que σ é o desvio padrão do consumo diário, L é o prazo de entrega em dias e Z vem do nível de serviço. L e o nível de serviço são os mesmos para todos os itens e ficam em Parâmetros.</li>
-                <li><strong>Ponto de pedido</strong> = d × L + estoque de segurança. Quando o saldo chega a esse valor, é hora de fazer o pedido.</li>
-                <li><strong>Cobertura:</strong> saldo ÷ consumo médio diário, ou seja, por quantos dias o saldo atual ainda dura.</li>
-                <li><strong>Quantidade sugerida:</strong> estoque máximo − saldo atual (só aparece se o item tem estoque máximo definido).</li>
-                <li>Itens com menos de 30 dias de histórico aparecem com um aviso, porque o cálculo ainda é pouco confiável.</li>
-            </ul>
-        </details>
-
         <section class="card">
             <div class="toolbar">
                 <input type="search" id="fBusca" class="input" placeholder="Buscar item ou código…" aria-label="Buscar item">
@@ -56,18 +44,16 @@
                     <tbody id="tbodyRep"></tbody>
                 </table>
             </div>
-            <p class="muted small mt-small">O <strong>prazo de entrega</strong> e o <strong>nível de serviço</strong> valem para todos os itens e ficam em <strong>Parâmetros</strong>.</p>
+            <p class="muted small mt-small">O <strong>prazo de entrega</strong> vale para todos os itens e fica em <strong>Parâmetros</strong>.</p>
         </section>
 
         <div class="modal" id="modalParam" role="dialog" aria-modal="true" aria-labelledby="paramTitulo">
             <div class="modal-box">
                 <h3 id="paramTitulo">Parâmetros de reposição</h3>
                 <form class="modal-body" id="formParam" autocomplete="off" novalidate>
-                    <p class="campo-ajuda">O <strong>prazo de entrega</strong> é o tempo, em dias, entre fazer o pedido e receber o material. O <strong>nível de serviço</strong> é a chance de o item não faltar durante esse prazo: quanto maior, maior o estoque de segurança.</p>
-                    <div class="grid-2">
-                        <div><label for="parPrazo">Prazo de entrega (dias)</label><input id="parPrazo" class="input" inputmode="numeric"></div>
-                        <div><label for="parNs">Nível de serviço (%)</label><input id="parNs" class="input" inputmode="decimal"></div>
-                    </div>
+                    <p class="campo-ajuda">O <strong>prazo de entrega</strong> é o tempo, em dias, entre fazer o pedido e receber o material. Vale para todos os itens e entra no cálculo do ponto de pedido e do estoque de segurança.</p>
+                    <label for="parPrazo">Prazo de entrega (dias)</label>
+                    <input id="parPrazo" class="input" inputmode="numeric">
                     <div class="alert-error" id="paramErro" role="alert" hidden><div></div></div>
                     <div class="modal-actions">
                         <button type="button" class="btn btn-ghost" id="paramCancelar">Cancelar</button>
