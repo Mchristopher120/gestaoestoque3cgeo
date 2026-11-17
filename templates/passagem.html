@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <title>Abrindo {{ sistema }}…</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" sizes="any">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='tema.js') }}"></script>
+</head>
+<body class="auth-body">
+    <main class="auth-card passagem">
+        <img class="auth-logo-img" src="{{ url_for('static', filename='img/logistica.png') }}" alt="" width="120" height="62">
+        <h1>Abrindo {{ sistema }}</h1>
+        <p class="muted"><span class="spinner" aria-hidden="true"></span> Entrando como <strong>{{ usuario }}</strong>…</p>
+        <form id="formPassagem" method="post" action="{{ acao }}">
+            <input type="hidden" name="passe" value="{{ passe }}">
+            <button type="submit" class="btn btn-primary">Continuar</button>
+        </form>
+        <p class="muted small"><a href="/">Voltar ao Estoque</a></p>
+    </main>
+    <script>document.getElementById('formPassagem').submit();</script>
+</body>
+</html>
